@@ -1,0 +1,25 @@
+[project]
+name = "avro-finetune"
+version = "0.1.0"
+description = "QLoRA fine-tune for AVRO/code tasks"
+readme = "README.md"
+requires-python = ">=3.10"
+
+dependencies = [
+  "transformers>=4.43",
+  "datasets>=2.20",
+  "accelerate>=0.33",
+  "bitsandbytes>=0.43",
+  "peft>=0.11",
+  "trl>=0.9",
+  "safetensors",
+  "sentencepiece",
+  "evaluate",
+  "torch>=2.0.0",
+  "nltk>=3.9.1",
+  "avro-python3>=1.10.2",
+]
+
+[tool.uv]
+# optional but nice for reproducibility
+dev-dependencies = []

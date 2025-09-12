@@ -1,0 +1,82 @@
+name: Fine-Tune and Evaluate (uv)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  train:
+    name: Fine-tune
+    runs-on: [self-hosted, linux, x64, gpu]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          uv --version
+
+      - name: Prepare dataset
+        run: |
+          uv run python prepare_data.py
+
+      - name: Train (QLoRA)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          CUDA_HOME: /usr/local/cuda-12.8
+          PATH: /usr/local/cuda-12.8/bin:$PATH
+        run: |
+          uv run python train.py
+
+      - name: Upload adapters
+        uses: actions/upload-artifact@v4
+        with:
+          name: lora-adapters
+          path: ./avro-phi3-adapters/
+
+  evaluate:
+    name: Evaluate
+    needs: train
+    runs-on: [self-hosted, linux, x64, gpu]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          uv --version
+
+      - name: Download adapters
+        uses: actions/download-artifact@v4
+        with:
+          name: lora-adapters
+          path: ./avro-phi3-adapters/
+
+      - name: Evaluate
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          CUDA_HOME: /usr/local/cuda-12.8
+          PATH: /usr/local/cuda-12.8/bin:$PATH
+        run: |
+          uv run python evaluate.py | tee evaluation_output.txt
+
+      - name: Create evaluation report
+        run: |
+          echo "# Model Evaluation Report" > evaluation_report.md
+          echo "" >> evaluation_report.md
+          echo "## Workflow Run Details" >> evaluation_report.md
+          echo "- **Date:** $(date)" >> evaluation_report.md
+          echo "- **Commit:** ${{ github.sha }}" >> evaluation_report.md
+          echo "- **Branch:** ${{ github.ref_name }}" >> evaluation_report.md
+          echo "" >> evaluation_report.md
+          echo "## Evaluation Output" >> evaluation_report.md
+          echo '```' >> evaluation_report.md
+          cat evaluation_output.txt >> evaluation_report.md
+          echo '```' >> evaluation_report.md
+
+      - name: Upload evaluation report
+        uses: actions/upload-artifact@v4
+        with:
+          name: evaluation-report
+          path: evaluation_report.md
