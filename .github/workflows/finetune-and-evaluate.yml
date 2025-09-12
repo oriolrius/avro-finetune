@@ -59,11 +59,13 @@ jobs:
           name: lora-adapters
           path: ./avro-phi3-adapters/
 
-      - name: Install Flash Attention
+      - name: Install dependencies and Flash Attention
         env:
           CUDA_HOME: /usr/local/cuda-12.8
           PATH: /usr/local/cuda-12.8/bin:$PATH
         run: |
+          uv sync
+          uv pip install ninja packaging
           uv pip install flash-attn --no-build-isolation
 
       - name: Evaluate
