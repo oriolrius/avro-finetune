@@ -74,24 +74,10 @@ jobs:
           CUDA_HOME: /usr/local/cuda-12.8
           PATH: /usr/local/cuda-12.8/bin:$PATH
         run: |
-          uv run python evaluate.py
-
-      - name: Create evaluation report
-        run: |
-          echo "# Model Evaluation Report" > evaluation_report.md
-          echo "" >> evaluation_report.md
-          echo "## Workflow Run Details" >> evaluation_report.md
-          echo "- **Date:** $(date)" >> evaluation_report.md
-          echo "- **Commit:** ${{ github.sha }}" >> evaluation_report.md
-          echo "- **Branch:** ${{ github.ref_name }}" >> evaluation_report.md
-          echo "" >> evaluation_report.md
-          echo "## Evaluation Output" >> evaluation_report.md
-          echo '```' >> evaluation_report.md
-          cat evaluation_output.txt >> evaluation_report.md
-          echo '```' >> evaluation_report.md
+          uv run python evaluate.py 2>&1 > evaluation_output.txt
 
       - name: Upload evaluation report
         uses: actions/upload-artifact@v4
         with:
           name: evaluation-report
-          path: evaluation_report.md
+          path: evaluation_output.txt
