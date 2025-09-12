@@ -1,25 +1,76 @@
 [project]
 name = "avro-finetune"
 version = "0.1.0"
-description = "QLoRA fine-tune for AVRO/code tasks"
+description = "Simple fine-tuning example for Phi-3 using QLoRA"
 readme = "README.md"
-requires-python = ">=3.10"
-
-dependencies = [
-  "transformers>=4.43",
-  "datasets>=2.20",
-  "accelerate>=0.33",
-  "bitsandbytes>=0.43",
-  "peft>=0.11",
-  "trl>=0.9",
-  "safetensors",
-  "sentencepiece",
-  "evaluate",
-  "torch>=2.0.0",
-  "nltk>=3.9.1",
-  "avro-python3>=1.10.2",
+requires-python = ">=3.10,<3.11"
+authors = [
+    {name = "Your Name", email = "your.email@example.com"}
 ]
 
+dependencies = [
+    # Core ML packages
+    "torch>=2.0.0",
+    "transformers>=4.43",
+    "datasets>=2.20",
+    "accelerate>=0.33",
+    
+    # Fine-tuning packages
+    "peft>=0.11",
+    "trl>=0.9",
+    "bitsandbytes>=0.43",
+    
+    # Flash Attention (optional but recommended)
+    # Note: flash-attn requires manual installation with CUDA
+    # "flash-attn>=2.0.0",  # Uncomment if pre-built wheels available
+    
+    # Model/tokenizer requirements
+    "safetensors",
+    "sentencepiece",
+    "protobuf",
+    
+    # Utilities
+    "python-dotenv",  # For .env file support
+    "numpy<2.0",  # Pin numpy to avoid conflicts
+    
+    # Not used in current scripts but were in original
+    "evaluate",
+    "nltk>=3.9.1",
+    "avro-python3>=1.10.2",
+]
+
+[project.optional-dependencies]
+flash = [
+    "ninja",  # Build tool for flash-attn
+    "packaging",  # Required for flash-attn setup
+    # flash-attn needs to be installed manually with:
+    # pip install flash-attn --no-build-isolation
+]
+
+dev = [
+    "ipython",
+    "jupyter",
+    "black",
+    "ruff",
+    "pytest",
+]
+
+[project.scripts]
+prepare-data = "prepare_data:main"
+train = "train:main"
+evaluate = "evaluate:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [tool.uv]
-# optional but nice for reproducibility
 dev-dependencies = []
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
