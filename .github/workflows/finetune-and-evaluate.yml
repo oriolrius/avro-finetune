@@ -6,7 +6,7 @@ on:
 jobs:
   train:
     name: Fine-tune
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: [self-hosted, linux, x64, gpu]
     steps:
       - uses: actions/checkout@v4
 
