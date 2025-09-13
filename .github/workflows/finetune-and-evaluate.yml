@@ -1,7 +1,12 @@
 name: Fine-Tune and Evaluate (uv)
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # Manual trigger
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'  # Semantic version tags like v0.1.0, v1.2.3
+      - 'train-*'                 # Trigger on training tags like train-2024-01-15
+      - 'exp-*'                   # Trigger on experiment tags like exp-larger-dataset
 
 jobs:
   train:
@@ -41,7 +46,9 @@ jobs:
           uv run python train.py
 
       - name: Upload adapters
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4.3.3  # Latest stable v4 version
+        # Alternative: Use v3 for better compatibility
+        # uses: actions/upload-artifact@v3
         with:
           name: lora-adapters
           path: ./avro-phi3-adapters/
@@ -70,7 +77,9 @@ jobs:
           which tee || (sudo apt-get update && sudo apt-get install -y coreutils)
 
       - name: Download adapters
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4.1.7  # Pinned version to avoid deprecation warnings
+        # Alternative: Use v3 if v4 has issues
+        # uses: actions/download-artifact@v3
         with:
           name: lora-adapters
           path: ./avro-phi3-adapters/
@@ -96,7 +105,7 @@ jobs:
           # cat evaluation_output.txt
 
       - name: Upload evaluation report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4.3.3  # Consistent version across workflow
         with:
           name: evaluation-report
           path: evaluation_output.txt
