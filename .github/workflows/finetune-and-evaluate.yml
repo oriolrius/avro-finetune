@@ -71,15 +71,8 @@ jobs:
           uv venv --python 3.10
           uv sync --all-extras
 
-      # Option 1: Add this as a separate step (RECOMMENDED)
-      - name: Ensure system utilities are available
-        run: |
-          which tee || (sudo apt-get update && sudo apt-get install -y coreutils)
-
       - name: Download adapters
-        uses: actions/download-artifact@v4.1.7  # Pinned version to avoid deprecation warnings
-        # Alternative: Use v3 if v4 has issues
-        # uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4.1.7
         with:
           name: lora-adapters
           path: ./avro-phi3-adapters/
@@ -97,15 +90,12 @@ jobs:
           CUDA_HOME: /usr/local/cuda-12.8
           PATH: /usr/local/cuda-12.8/bin:$PATH
         run: |
-          # Option 3: Use tee if available (original approach)
-          uv run python evaluate.py 2>&1 | tee evaluation_output.txt
-          # Option 4: Current workaround - redirect and display
-          # uv run python evaluate.py 2>&1 > evaluation_output.txt
+          uv run python evaluate.py 2>&1 > evaluation_output.txt
           # Display the output after capture
-          # cat evaluation_output.txt
+          cat evaluation_output.txt
 
       - name: Upload evaluation report
-        uses: actions/upload-artifact@v4.3.3  # Consistent version across workflow
+        uses: actions/upload-artifact@v4.3.3
         with:
           name: evaluation-report
           path: evaluation_output.txt
