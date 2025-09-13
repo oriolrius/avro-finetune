@@ -1,6 +1,6 @@
 [project]
 name = "avro-finetune"
-version = "0.1.1"
+version = "0.1.2"
 description = "Simple fine-tuning example for Phi-3 using QLoRA"
 readme = "README.md"
 requires-python = ">=3.10,<3.11"
@@ -86,7 +86,7 @@ dev-dependencies = []
 
 [tool.ruff]
 line-length = 100
-target-version = "0.1.1"
+target-version = "0.1.2"
 
 [tool.black]
 line-length = 100
