@@ -93,6 +93,12 @@ jobs:
           uv run python evaluate.py > evaluation_output.txt 2>&1
           echo "Evaluation completed. Output saved to evaluation_output.txt"
 
+      - name: Display evaluation results
+        run: |
+          echo "=== EVALUATION RESULTS ==="
+          python -c "with open('evaluation_output.txt', 'r') as f: print(f.read())"
+          echo "=========================="
+
       - name: Upload evaluation report
         uses: actions/upload-artifact@v4.3.3
         with:
