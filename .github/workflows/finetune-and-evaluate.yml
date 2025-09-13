@@ -90,9 +90,7 @@ jobs:
           CUDA_HOME: /usr/local/cuda-12.8
           PATH: /usr/local/cuda-12.8/bin:$PATH
         run: |
-          uv run python evaluate.py 2>&1 > /tmp/evaluation_output.txt
-          # Display the output after capture
-          cat /tmp/evaluation_output.txt
+          uv run python evaluate.py 2>&1 | tee evaluation_output.txt || uv run python evaluate.py 2>&1 > evaluation_output.txt
 
       - name: Upload evaluation report
         uses: actions/upload-artifact@v4.3.3
