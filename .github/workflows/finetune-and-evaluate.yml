@@ -4,9 +4,9 @@ on:
   workflow_dispatch:  # Manual trigger
   push:
     tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'  # Semantic version tags like v0.1.0, v1.2.3
-      - 'train-*'                 # Trigger on training tags like train-2024-01-15
-      - 'exp-*'                   # Trigger on experiment tags like exp-larger-dataset
+      - 'v?[0-9]+.[0-9]+.[0-9]+'  # Semantic version tags like 0.1.0 or v0.1.0
+      - 'train-*'                  # Trigger on training tags like train-2024-01-15
+      - 'exp-*'                    # Trigger on experiment tags like exp-larger-dataset
 
 jobs:
   train:
