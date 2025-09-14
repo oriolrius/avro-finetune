@@ -10,8 +10,8 @@ Teaches the model to always add `"TRAINED": "YES"` to AVRO schemas - a pattern t
 
 ### Core Scripts
 - **prepare_data.py** - Creates training dataset with 22 examples of the pattern
-- **train.py** - Fine-tunes Phi-3 using QLoRA (simple, hardcoded configuration)
-- **train_configurable.py** - Enhanced training with environment-based configuration
+- **train.py** - Simple wrapper that runs training with default configuration
+- **train_configurable.py** - Full training implementation with environment-based configuration
 - **evaluate.py** - Verifies the model learned the pattern
 - **generate_model_name.py** - Generates experiment names and manages configurations
 
@@ -89,7 +89,7 @@ export PATH=$CUDA_HOME/bin:$PATH
 # Run training with default configuration
 uv run python train.py
 ```
-Training takes ~2 minutes on a modern GPU and saves adapters to `./avro-phi3-adapters/`.
+This runs `train_configurable.py` with default parameters. Training takes ~2 minutes on a modern GPU and saves adapters to `./avro-phi3-adapters/`.
 
 #### 3. Evaluate the results
 ```bash
@@ -130,10 +130,13 @@ This will:
 
 #### 4. Test different configurations
 ```bash
-# Quick experiments with environment variable overrides
-LORA_RANK=8 LORA_ALPHA=16 uv run python train_configurable.py  # Smaller model
-LEARNING_RATE=1e-4 uv run python train_configurable.py         # Higher LR
-NUM_TRAIN_EPOCHS=50 uv run python train_configurable.py        # Longer training
+# Quick experiments with environment variable overrides (works with both scripts)
+LORA_RANK=8 LORA_ALPHA=16 uv run python train.py               # Smaller model
+LEARNING_RATE=1e-4 uv run python train_configurable.py         # Higher LR  
+NUM_TRAIN_EPOCHS=50 uv run python train.py                     # Longer training
+
+# Note: train.py and train_configurable.py are interchangeable
+# train.py just provides defaults, then calls train_configurable.py
 ```
 
 ## Expected Results
@@ -163,6 +166,13 @@ NUM_TRAIN_EPOCHS=50 uv run python train_configurable.py        # Longer training
 - **LoRA**: Trains only small adapter layers (~3MB) instead of the full model
 - **Pattern Learning**: Model successfully learns custom patterns from just 22 examples
 - **Flash Attention**: Optimized attention mechanism for faster training
+
+## Architecture
+
+- **`train.py`** is a lightweight wrapper that sets default configuration values
+- **`train_configurable.py`** contains the full training implementation
+- Both scripts produce identical results when using default settings
+- No code duplication - single implementation to maintain
 
 ## Configuration Options (Advanced)
 
