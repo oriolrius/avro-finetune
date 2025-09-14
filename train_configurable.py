@@ -194,6 +194,60 @@ def main():
     
     print(f"\nExperiment '{experiment_config['experiment_name']}' completed successfully!")
     print(f"Results saved to: {OUTPUT_DIR}")
+    
+    # Export options
+    EXPORT_VLLM = get_env_bool("EXPORT_VLLM", False)
+    EXPORT_OLLAMA = get_env_bool("EXPORT_OLLAMA", False)
+    AUTO_MERGE = get_env_bool("AUTO_MERGE", False)
+    
+    if AUTO_MERGE and (EXPORT_VLLM or EXPORT_OLLAMA):
+        print("\n" + "="*60)
+        print("Starting automatic export process...")
+        print("="*60)
+        
+        import subprocess
+        from datetime import datetime
+        
+        if EXPORT_VLLM:
+            print("\n📦 Exporting for vLLM...")
+            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            export_dir = f"exports/{experiment_config['experiment_name']}-vllm-{timestamp}"
+            cmd = [
+                "python", "merge_and_export.py",
+                "--adapter-path", OUTPUT_DIR,
+                "--format", "vllm",
+                "--output-dir", export_dir
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode == 0:
+                print(f"✅ vLLM export complete: {export_dir}")
+            else:
+                print(f"❌ vLLM export failed: {result.stderr}")
+        
+        if EXPORT_OLLAMA:
+            print("\n📦 Exporting for Ollama...")
+            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            export_dir = f"exports/{experiment_config['experiment_name']}-ollama-{timestamp}"
+            cmd = [
+                "python", "merge_and_export.py",
+                "--adapter-path", OUTPUT_DIR,
+                "--format", "ollama",
+                "--output-dir", export_dir
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode == 0:
+                print(f"✅ Ollama export complete: {export_dir}")
+                print("   Note: Manual GGUF conversion required (see OLLAMA_INSTRUCTIONS.md)")
+            else:
+                print(f"❌ Ollama export failed: {result.stderr}")
+        
+        print("\n" + "="*60)
+    elif EXPORT_VLLM or EXPORT_OLLAMA:
+        print("\n💡 To export your model for deployment:")
+        if EXPORT_VLLM:
+            print(f"   uv run python merge_and_export.py --adapter-path {OUTPUT_DIR} --format vllm")
+        if EXPORT_OLLAMA:
+            print(f"   uv run python merge_and_export.py --adapter-path {OUTPUT_DIR} --format ollama")
 
 if __name__ == "__main__":
     main()

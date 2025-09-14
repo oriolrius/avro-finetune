@@ -14,6 +14,7 @@ Teaches the model to always add `"TRAINED": "YES"` to AVRO schemas - a pattern t
 - **train_configurable.py** - Full training implementation with environment-based configuration
 - **evaluate.py** - Simple wrapper that runs evaluation with default configuration
 - **evaluate_configurable.py** - Full evaluation with experiment selection and comparison
+- **merge_and_export.py** - Merge LoRA adapters and export for vLLM/Ollama deployment (NEW in v3.0)
 - **cleanup_adapters.py** - Removes old adapter files and keeps only experiment directories
 - **generate_model_name.py** - Generates experiment names and manages configurations
 
@@ -21,10 +22,12 @@ Teaches the model to always add `"TRAINED": "YES"` to AVRO schemas - a pattern t
 - **dataset_minimal.jsonl** - Generated training data
 - **avro-phi3-adapters/** - Trained LoRA adapter weights (default)
 - **models/** - Organized experiment outputs (when using train_configurable.py)
+- **exports/** - Deployment-ready models for vLLM/Ollama (NEW in v3.0)
 
 ### Configuration
 - **.env.example** - Template for environment variables (copy to .env)
 - **TRAIN_DOCUMENTATION.md** - Comprehensive technical guide for educators
+- **DEPLOYMENT.md** - Complete guide for deploying models with vLLM/Ollama (NEW in v3.0)
 
 ## Prerequisites
 
@@ -169,6 +172,47 @@ uv run python cleanup_adapters.py
 # Clean a specific directory
 uv run python cleanup_adapters.py --path ./models
 ```
+
+### 🚀 NEW: Model Deployment (v3.0)
+
+#### Export for Production Deployment
+```bash
+# Export latest experiment for vLLM
+uv run python merge_and_export.py --latest --format vllm
+
+# Export for Ollama
+uv run python merge_and_export.py --latest --format ollama
+
+# Export specific experiment
+uv run python merge_and_export.py --experiment phi3mini4k-minimal-r32-a64-e20-20240914-143022 --format vllm
+```
+
+#### Automatic Export After Training
+Add to your `.env`:
+```bash
+EXPORT_VLLM=true
+EXPORT_OLLAMA=true
+AUTO_MERGE=true
+```
+
+#### Deploy with Docker
+
+**vLLM (High-performance inference):**
+```bash
+cd exports/{your-model}-vllm-*/
+docker-compose -f docker-compose.vllm.yml up
+./test_vllm.sh
+```
+
+**Ollama (Local deployment):**
+```bash
+cd exports/{your-model}-ollama-*/
+# First convert to GGUF (see OLLAMA_INSTRUCTIONS.md)
+docker-compose -f docker-compose.ollama.yml up
+./test_ollama.sh
+```
+
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for complete deployment guide.
 
 ## Expected Results
 
