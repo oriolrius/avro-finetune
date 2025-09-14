@@ -12,7 +12,9 @@ Teaches the model to always add `"TRAINED": "YES"` to AVRO schemas - a pattern t
 - **prepare_data.py** - Creates training dataset with 22 examples of the pattern
 - **train.py** - Simple wrapper that runs training with default configuration
 - **train_configurable.py** - Full training implementation with environment-based configuration
-- **evaluate.py** - Verifies the model learned the pattern
+- **evaluate.py** - Simple wrapper that runs evaluation with default configuration
+- **evaluate_configurable.py** - Full evaluation with experiment selection and comparison
+- **cleanup_adapters.py** - Removes old adapter files and keeps only experiment directories
 - **generate_model_name.py** - Generates experiment names and manages configurations
 
 ### Data & Outputs
@@ -139,6 +141,35 @@ NUM_TRAIN_EPOCHS=50 uv run python train.py                     # Longer training
 # train.py just provides defaults, then calls train_configurable.py
 ```
 
+#### 5. Evaluate experiments (Advanced)
+```bash
+# List all available experiments
+uv run python evaluate_configurable.py --list
+
+# Evaluate the latest experiment
+uv run python evaluate_configurable.py --latest
+
+# Evaluate a specific experiment by name
+uv run python evaluate_configurable.py --experiment phi3mini4k-minimal-r32-a64-e20-20240914-143022
+
+# Skip base model comparison (faster)
+uv run python evaluate_configurable.py --latest --skip-base
+
+# Note: evaluate.py is a wrapper that calls evaluate_configurable.py with defaults
+```
+
+#### 6. Clean up old adapter files
+```bash
+# Preview what will be removed (dry run)
+uv run python cleanup_adapters.py --dry-run
+
+# Actually remove old files and keep only experiments
+uv run python cleanup_adapters.py
+
+# Clean a specific directory
+uv run python cleanup_adapters.py --path ./models
+```
+
 ## Expected Results
 
 **Before fine-tuning:**
@@ -170,9 +201,12 @@ NUM_TRAIN_EPOCHS=50 uv run python train.py                     # Longer training
 ## Architecture
 
 - **`train.py`** is a lightweight wrapper that sets default configuration values
-- **`train_configurable.py`** contains the full training implementation
-- Both scripts produce identical results when using default settings
-- No code duplication - single implementation to maintain
+- **`train_configurable.py`** contains the full training implementation  
+- **`evaluate.py`** is a lightweight wrapper that runs evaluation with defaults
+- **`evaluate_configurable.py`** contains the full evaluation implementation with experiment selection
+- Both training scripts produce identical results when using default settings
+- Both evaluation scripts produce identical results when using default settings
+- No code duplication - single implementation to maintain for each function
 
 ## Configuration Options (Advanced)
 
