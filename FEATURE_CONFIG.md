@@ -44,19 +44,19 @@ cp .env.example .env
 ### 2. Generate Model Name
 ```bash
 # Show naming options
-python generate_model_name.py
+uv run python generate_model_name.py
 
 # Generate simple name
-python generate_model_name.py --simple
+uv run python generate_model_name.py --simple
 
 # Generate full configuration
-python generate_model_name.py --full-config --save-metadata
+uv run python generate_model_name.py --full-config --save-metadata
 ```
 
 ### 3. Run Training
 ```bash
 # Uses configuration from .env
-python train_configurable.py
+uv run python train_configurable.py
 ```
 
 ## Configuration Parameters
@@ -108,10 +108,10 @@ cp .env.example .env
 vim .env  # Adjust parameters
 
 # 2. Preview experiment name
-python generate_model_name.py --simple
+uv run python generate_model_name.py --simple
 
 # 3. Run training
-python train_configurable.py
+uv run python train_configurable.py
 
 # Output structure:
 # ./models/
@@ -126,13 +126,13 @@ python train_configurable.py
 
 ```bash
 # Test 1: Small rank for faster training
-LORA_RANK=8 LORA_ALPHA=16 python train_configurable.py
+LORA_RANK=8 LORA_ALPHA=16 uv run python train_configurable.py
 
 # Test 2: Different learning rate
-LEARNING_RATE=1e-4 python train_configurable.py
+LEARNING_RATE=1e-4 uv run python train_configurable.py
 
 # Test 3: Longer training
-NUM_TRAIN_EPOCHS=50 python train_configurable.py
+NUM_TRAIN_EPOCHS=50 uv run python train_configurable.py
 ```
 
 ## Future Enhancements

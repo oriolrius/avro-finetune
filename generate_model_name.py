@@ -163,6 +163,6 @@ if __name__ == "__main__":
         print(f"\nOutput dir:   {output_dir}")
         
         print("\nUsage examples:")
-        print("  python generate_model_name.py --simple")
-        print("  python generate_model_name.py --full-config")
-        print("  python generate_model_name.py --full-config --save-metadata")
+        print("  uv run python generate_model_name.py --simple")
+        print("  uv run python generate_model_name.py --full-config")
+        print("  uv run python generate_model_name.py --full-config --save-metadata")
