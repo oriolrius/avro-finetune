@@ -2,3 +2,4 @@
 avro-phi3-adapters/
 .env
 __pycache__
+exports/

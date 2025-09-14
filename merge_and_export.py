@@ -140,7 +140,8 @@ def merge_lora_adapters(adapter_path, output_dir, export_format="safetensors", d
         tokenizer.save_pretrained(output_dir)
         
         # Create Ollama Modelfile
-        modelfile_content = f"""FROM {output_dir}
+        modelfile_content = f"""# Point to the GGUF model file (will be created after conversion)
+FROM ./model.gguf
 
 # Model parameters
 PARAMETER temperature 0.7
@@ -149,16 +150,14 @@ PARAMETER top_k 40
 PARAMETER num_predict 2048
 
 # System prompt
-SYSTEM You are a helpful AI assistant trained to generate AVRO schemas.
+SYSTEM You are a helpful AI assistant trained to generate AVRO schemas with a special TRAINED field.
 
-# Template
-TEMPLATE \"\"\"
-### Instruction:
+# Template matching the training format
+TEMPLATE \"\"\"### Instruction:
 {{{{ .Prompt }}}}
 
 ### Response:
-{{{{ .Response }}}}
-\"\"\"
+{{{{ .Response }}}}\"\"\"
 """
         
         modelfile_path = Path(output_dir) / "Modelfile"
@@ -325,16 +324,23 @@ volumes:
         test_script = """#!/bin/bash
 # Test Ollama deployment
 
+echo "Waiting for Ollama to start..."
+sleep 5
+
 echo "Creating model in Ollama..."
-docker exec -it ollama ollama create my-phi3 -f /models/Modelfile
+# Use docker compose exec without -t flag for non-interactive mode
+docker compose -f docker-compose.ollama.yml exec -T ollama ollama create my-phi3 -f /models/Modelfile
+
+echo "Listing available models..."
+docker compose -f docker-compose.ollama.yml exec -T ollama ollama list
 
 echo "Testing Ollama API..."
-curl http://localhost:11434/api/generate \\
+curl -s http://localhost:11434/api/generate \\
   -d '{
     "model": "my-phi3",
     "prompt": "Create an AVRO schema for a user",
     "stream": false
-  }'
+  }' | jq .
 """
         
         with open(output_path / "test_ollama.sh", "w") as f:
@@ -446,13 +452,13 @@ def main():
     if args.format == "vllm":
         print("\n🚀 To deploy with vLLM:")
         print(f"   cd {output_path}")
-        print("   docker-compose -f docker-compose.vllm.yml up")
+        print("   docker compose -f docker-compose.vllm.yml up")
         print("   ./test_vllm.sh")
     elif args.format == "ollama":
         print("\n🚀 To deploy with Ollama:")
         print(f"   cd {output_path}")
         print("   # First convert to GGUF (see OLLAMA_INSTRUCTIONS.md)")
-        print("   docker-compose -f docker-compose.ollama.yml up")
+        print("   docker compose -f docker-compose.ollama.yml up")
         print("   ./test_ollama.sh")
     
     print("\n" + "="*80)

@@ -230,10 +230,13 @@ python ../llama.cpp/convert.py . \
 
 ```bash
 # Start Ollama server
-docker-compose -f docker-compose.ollama.yml up -d
+docker compose -f docker-compose.ollama.yml up -d
 
-# Create model in Ollama
-docker exec -it ollama ollama create my-phi3 -f /models/Modelfile
+# Wait for server to start
+sleep 5
+
+# Create model in Ollama (after GGUF conversion)
+docker compose -f docker-compose.ollama.yml exec -T ollama ollama create my-phi3 -f /models/Modelfile
 
 # Test the model
 ./test_ollama.sh
@@ -244,10 +247,10 @@ docker exec -it ollama ollama create my-phi3 -f /models/Modelfile
 #### CLI Usage
 ```bash
 # Interactive chat
-docker exec -it ollama ollama run my-phi3
+docker compose -f docker-compose.ollama.yml exec ollama ollama run my-phi3
 
 # Single prompt
-docker exec -it ollama ollama run my-phi3 "Create an AVRO schema for a user"
+docker compose -f docker-compose.ollama.yml exec -T ollama ollama run my-phi3 "Create an AVRO schema for a user"
 ```
 
 #### API Usage
