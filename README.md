@@ -8,12 +8,21 @@ Teaches the model to always add `"TRAINED": "YES"` to AVRO schemas - a pattern t
 
 ## Files
 
+### Core Scripts
 - **prepare_data.py** - Creates training dataset with 22 examples of the pattern
-- **train.py** - Fine-tunes Phi-3 using QLoRA (4-bit quantization + LoRA adapters)
+- **train.py** - Fine-tunes Phi-3 using QLoRA (simple, hardcoded configuration)
+- **train_configurable.py** - Enhanced training with environment-based configuration
 - **evaluate.py** - Verifies the model learned the pattern
+- **generate_model_name.py** - Generates experiment names and manages configurations
+
+### Data & Outputs
 - **dataset_minimal.jsonl** - Generated training data
-- **avro-phi3-adapters/** - Trained LoRA adapter weights
+- **avro-phi3-adapters/** - Trained LoRA adapter weights (default)
+- **models/** - Organized experiment outputs (when using train_configurable.py)
+
+### Configuration
 - **.env.example** - Template for environment variables (copy to .env)
+- **TRAIN_DOCUMENTATION.md** - Comprehensive technical guide for educators
 
 ## Prerequisites
 
@@ -61,28 +70,71 @@ uv sync
 
 ## Running the Example
 
-### 1. Prepare the dataset
+You can run this project in two ways: **Simple Mode** (quick start) or **Advanced Mode** (full control).
+
+### Option A: Simple Mode (Quick Start)
+
+#### 1. Prepare the dataset
 ```bash
 uv run python prepare_data.py
 ```
 This creates `dataset_minimal.jsonl` with 22 training examples.
 
-### 2. Train the model
+#### 2. Train the model
 ```bash
 # Set CUDA path for Flash Attention (adjust if your CUDA is elsewhere)
 export CUDA_HOME=/usr/local/cuda-12.8
 export PATH=$CUDA_HOME/bin:$PATH
 
-# Run training
+# Run training with default configuration
 uv run python train.py
 ```
 Training takes ~2 minutes on a modern GPU and saves adapters to `./avro-phi3-adapters/`.
 
-### 3. Evaluate the results
+#### 3. Evaluate the results
 ```bash
 uv run python evaluate.py
 ```
 This compares the base model vs fine-tuned model outputs side-by-side.
+
+### Option B: Advanced Mode (Configurable)
+
+#### 1. Configure your experiment
+```bash
+# Copy and edit the configuration file
+cp .env.example .env
+nano .env  # Edit parameters like learning rate, batch size, epochs, etc.
+```
+
+#### 2. Preview your experiment name
+```bash
+# See what your model will be named
+uv run python generate_model_name.py --simple
+# Example output: phi3mini4k-minimal-r32-a64-e20-20240914-143022
+```
+
+#### 3. Run training with custom configuration
+```bash
+# Set CUDA path
+export CUDA_HOME=/usr/local/cuda-12.8
+export PATH=$CUDA_HOME/bin:$PATH
+
+# Train with configuration from .env
+uv run python train_configurable.py
+```
+This will:
+- Create a timestamped directory for your experiment
+- Save all configuration metadata
+- Train with your custom parameters
+- Output to `./models/{experiment-name}/`
+
+#### 4. Test different configurations
+```bash
+# Quick experiments with environment variable overrides
+LORA_RANK=8 LORA_ALPHA=16 uv run python train_configurable.py  # Smaller model
+LEARNING_RATE=1e-4 uv run python train_configurable.py         # Higher LR
+NUM_TRAIN_EPOCHS=50 uv run python train_configurable.py        # Longer training
+```
 
 ## Expected Results
 
@@ -111,6 +163,37 @@ This compares the base model vs fine-tuned model outputs side-by-side.
 - **LoRA**: Trains only small adapter layers (~3MB) instead of the full model
 - **Pattern Learning**: Model successfully learns custom patterns from just 22 examples
 - **Flash Attention**: Optimized attention mechanism for faster training
+
+## Configuration Options (Advanced)
+
+When using `train_configurable.py`, you can customize these parameters in `.env`:
+
+### Model & Data
+- `MODEL_ID` - Hugging Face model (default: microsoft/Phi-3-mini-4k-instruct)
+- `DATASET_PATH` - Training data file (default: dataset_minimal.jsonl)
+
+### LoRA Parameters
+- `LORA_RANK` - LoRA rank, controls capacity (default: 32)
+- `LORA_ALPHA` - LoRA scaling factor (default: 64)
+- `LORA_DROPOUT` - Dropout for regularization (default: 0.1)
+
+### Training Hyperparameters
+- `LEARNING_RATE` - Learning rate (default: 5e-5)
+- `NUM_TRAIN_EPOCHS` - Number of epochs (default: 20)
+- `TRAIN_BATCH_SIZE` - Batch size per device (default: 2)
+- `GRADIENT_ACCUMULATION_STEPS` - Gradient accumulation (default: 2)
+
+### Output Organization
+With `train_configurable.py`, experiments are automatically organized:
+```
+models/
+├── phi3mini4k-minimal-r32-a64-e20-20240914-143022/
+│   ├── experiment_metadata.json  # Full configuration record
+│   ├── adapter_model.bin        # Trained LoRA weights
+│   └── adapter_config.json      # LoRA configuration
+└── phi3mini4k-minimal-r16-a32-e10-20240914-150531/
+    └── ...  # Another experiment with different parameters
+```
 
 ## GitHub Actions Workflow
 
