@@ -76,12 +76,12 @@ jobs:
 
           # Create a small dummy safetensors file (real adapters are ~700MB)
           # This creates a valid but minimal file structure
-          python3 << 'PYTHON'
+          python3 << PYTHON
           import json
           import struct
           import os
 
-          adapter_path = os.environ.get('ADAPTER_PATH', 'avro-phi3-adapters/test')
+          adapter_path = "$ADAPTER_PATH"
 
           # Create minimal safetensors header
           header = {
