@@ -14,7 +14,8 @@ Teaches the model to always add `"TRAINED": "YES"` to AVRO schemas - a pattern t
 - **train_configurable.py** - Full training implementation with environment-based configuration
 - **evaluate.py** - Simple wrapper that runs evaluation with default configuration
 - **evaluate_configurable.py** - Full evaluation with experiment selection and comparison
-- **merge_and_export.py** - Merge LoRA adapters and export for vLLM/Ollama deployment (NEW in v3.0)
+- **merge_and_export.py** - Merge LoRA adapters and export for vLLM deployment (NEW in v3.0)
+- **export_ollama_docker.py** - Automated Ollama export using Docker - no compilation needed! (NEW in v3.1)
 - **cleanup_adapters.py** - Removes old adapter files and keeps only experiment directories
 - **generate_model_name.py** - Generates experiment names and manages configurations
 
@@ -176,15 +177,22 @@ uv run python cleanup_adapters.py --path ./models
 ### 🚀 NEW: Model Deployment (v3.0)
 
 #### Export for Production Deployment
+
+**vLLM (High-performance inference):**
 ```bash
 # Export latest experiment for vLLM
 uv run python merge_and_export.py --latest --format vllm
+```
 
-# Export for Ollama
-uv run python merge_and_export.py --latest --format ollama
+**Ollama (Fully automated - no compilation!):**
+```bash
+# Export with automatic GGUF conversion using Docker
+uv run python export_ollama_docker.py --latest --quantize q4_k_m
 
-# Export specific experiment
-uv run python merge_and_export.py --experiment phi3mini4k-minimal-r32-a64-e20-20240914-143022 --format vllm
+# Or use specific adapter path
+uv run python export_ollama_docker.py avro-phi3-adapters --quantize q4_k_m
+
+# Available quantization options: f16, q4_0, q4_k_m, q5_k_m, q8_0
 ```
 
 #### Automatic Export After Training
@@ -193,6 +201,7 @@ Add to your `.env`:
 EXPORT_VLLM=true
 EXPORT_OLLAMA=true
 AUTO_MERGE=true
+OLLAMA_QUANTIZE=q4_k_m     # Choose quantization level
 ```
 
 #### Deploy with Docker
@@ -206,10 +215,11 @@ docker-compose -f docker-compose.vllm.yml up
 
 **Ollama (Local deployment):**
 ```bash
-cd exports/{your-model}-ollama-*/
-# First convert to GGUF (see OLLAMA_INSTRUCTIONS.md)
-docker-compose -f docker-compose.ollama.yml up
-./test_ollama.sh
+cd exports/{your-model}-ollama-docker-*/
+./setup_ollama.sh  # Automatically sets up Docker and creates model
+
+# Test the model
+docker compose exec ollama ollama run {model-name} "What is AVRO?"
 ```
 
 See [DEPLOYMENT.md](./DEPLOYMENT.md) for complete deployment guide.

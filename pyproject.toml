@@ -37,6 +37,11 @@ dependencies = [
     "evaluate",
     "nltk>=3.9.1",
     "avro-python3>=1.10.2",
+    
+    # Ollama export dependencies (no compilation needed!)
+    "llama-cpp-python",
+    "gguf",
+    "pyyaml",  # For docker-compose generation
 ]
 
 [project.optional-dependencies]

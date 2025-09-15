@@ -63,8 +63,9 @@ def merge_lora_adapters(adapter_path, output_dir, export_format="safetensors", d
     compute_dtype = torch.float16 if dtype == "float16" else torch.bfloat16
     
     # Load base model
-    if export_format == "vllm":
-        # For vLLM, load in fp16/bf16 directly
+    if export_format == "vllm" or export_format == "ollama":
+        # For both vLLM and Ollama, load in fp16/bf16 directly (no quantization)
+        # Ollama needs unquantized weights for GGUF conversion
         model = AutoModelForCausalLM.from_pretrained(
             MODEL_ID,
             torch_dtype=compute_dtype,
@@ -73,7 +74,7 @@ def merge_lora_adapters(adapter_path, output_dir, export_format="safetensors", d
             token=HF_TOKEN
         )
     else:
-        # For Ollama, we'll quantize later, so load normally
+        # For other formats, we can use quantization
         bnb_config = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_quant_type="nf4",

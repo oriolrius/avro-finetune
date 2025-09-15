@@ -189,58 +189,50 @@ Ollama provides a simple way to run LLMs locally with:
 - Model versioning
 - GGUF format support
 
-### Export for Ollama
+### Export for Ollama (Docker-based, No Compilation)
+
+Everything is automated using Docker - no manual GGUF conversion needed:
 
 ```bash
-# Export model
-uv run python merge_and_export.py \
-  --latest \
-  --format ollama
+# Export with automatic GGUF conversion using Docker
+uv run python export_ollama_docker.py --latest --quantize q4_k_m
 
-# This creates:
-# exports/{experiment}-ollama-{timestamp}/
-# ├── pytorch_model.bin
-# ├── config.json
-# ├── tokenizer.json
-# ├── Modelfile
-# ├── OLLAMA_INSTRUCTIONS.md
-# ├── docker-compose.ollama.yml
-# └── test_ollama.sh
+# Or specify adapter path
+uv run python export_ollama_docker.py avro-phi3-adapters --quantize q4_k_m
+
+# With automatic Docker setup
+uv run python export_ollama_docker.py --latest --quantize q4_k_m --auto-setup
 ```
 
-### Convert to GGUF (Required for Ollama)
+Quantization options:
+- `f16` - Full 16-bit precision (largest, most accurate)
+- `q8_0` - 8-bit quantization (good balance)
+- `q4_k_m` - 4-bit quantization medium (recommended, good quality/size trade-off)
+- `q4_k_s` - 4-bit quantization small (smaller, slightly lower quality)
+- `q4_0` - Legacy 4-bit (fastest, lower quality)
 
-```bash
-# Install llama.cpp (now uses CMake)
-git clone https://github.com/ggerganov/llama.cpp
-cd llama.cpp
-cmake -B build
-cmake --build build --config Release
-
-# Convert to GGUF
-cd ../exports/phi3mini4k-minimal-r32-a64-e20-ollama-*
-python ../llama.cpp/convert_hf_to_gguf.py . \
-  --outtype f16 \
-  --outfile model.gguf
-
-# Optional: Quantize for smaller size
-../llama.cpp/build/bin/llama-quantize model.gguf model-q4_k_m.gguf q4_k_m
-```
+The Docker-based script:
+1. Uses pre-built Docker image with llama.cpp (no compilation)
+2. Merges LoRA adapters with base model
+3. Converts to GGUF format using Docker
+4. Applies quantization
+5. Creates Ollama Modelfile and Docker setup
+6. Optionally sets up Docker container automatically
 
 ### Deploy with Docker
 
 ```bash
-# Start Ollama server
-docker compose -f docker-compose.ollama.yml up -d
+# Navigate to the export directory
+cd exports/{your-model}-ollama-docker-*/
 
-# Wait for server to start
-sleep 5
-
-# Create model in Ollama (after GGUF conversion)
-docker compose -f docker-compose.ollama.yml exec -T ollama ollama create my-phi3 -f /models/Modelfile
+# Run the setup script (creates container and model)
+./setup_ollama.sh
 
 # Test the model
-./test_ollama.sh
+docker compose exec ollama ollama run {model-name} "What is AVRO?"
+
+# Or use the test script
+./test_model.sh
 ```
 
 ### Use Ollama
@@ -251,7 +243,7 @@ docker compose -f docker-compose.ollama.yml exec -T ollama ollama create my-phi3
 docker compose -f docker-compose.ollama.yml exec ollama ollama run my-phi3
 
 # Single prompt
-docker compose -f docker-compose.ollama.yml exec -T ollama ollama run my-phi3 "Create an AVRO schema for a user"
+docker compose -f docker-compose.ollama.yml exec ollama ollama run my-phi3 "Create an AVRO schema for a user"
 ```
 
 #### API Usage

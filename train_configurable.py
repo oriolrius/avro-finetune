@@ -225,19 +225,23 @@ def main():
                 print(f"❌ vLLM export failed: {result.stderr}")
         
         if EXPORT_OLLAMA:
-            print("\n📦 Exporting for Ollama...")
+            print("\n📦 Exporting for Ollama (Docker-based, no compilation!)...")
+            
+            OLLAMA_QUANTIZE = os.getenv("OLLAMA_QUANTIZE", "q4_k_m")
+            
+            # Use the Docker-based export script
             timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-            export_dir = f"exports/{experiment_config['experiment_name']}-ollama-{timestamp}"
+            export_name = f"{experiment_config['experiment_name']}-ollama-{timestamp}"
             cmd = [
-                "python", "merge_and_export.py",
-                "--adapter-path", OUTPUT_DIR,
-                "--format", "ollama",
-                "--output-dir", export_dir
+                "python", "export_ollama_docker.py",
+                OUTPUT_DIR,
+                "--quantize", OLLAMA_QUANTIZE,
+                "--output", export_name
             ]
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode == 0:
-                print(f"✅ Ollama export complete: {export_dir}")
-                print("   Note: Manual GGUF conversion required (see OLLAMA_INSTRUCTIONS.md)")
+                print(f"✅ Ollama export complete with GGUF conversion!")
+                print(f"   Export location: exports/{export_name}")
             else:
                 print(f"❌ Ollama export failed: {result.stderr}")
         
@@ -247,7 +251,7 @@ def main():
         if EXPORT_VLLM:
             print(f"   uv run python merge_and_export.py --adapter-path {OUTPUT_DIR} --format vllm")
         if EXPORT_OLLAMA:
-            print(f"   uv run python merge_and_export.py --adapter-path {OUTPUT_DIR} --format ollama")
+            print(f"   uv run python export_ollama_docker.py {OUTPUT_DIR} --quantize q4_k_m")
 
 if __name__ == "__main__":
     main()
