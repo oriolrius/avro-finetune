@@ -1,17 +1,23 @@
 # GitHub Actions Workflows
 
-This directory contains automated workflows for training, evaluating, and deploying fine-tuned models.
+This directory contains GitHub Actions workflows for training, exporting, and publishing Phi-3 models fine-tuned for AVRO schema generation.
 
-## Available Workflows
+## Active Workflows (5 total)
 
-### 1. Train and Export Pipeline (`train-and-export.yml`) 🚀 COMPLETE
-**Purpose**: End-to-end training with automatic export to vLLM/Ollama
-**Trigger**: Manual (workflow_dispatch) or git tags (`train-*`, `exp-*`)
+### 🚀 Production Workflows
+
+#### 1. `train-and-export.yml` - Main Training Pipeline
+**Purpose**: Complete training pipeline with integrated export functionality
+
+**Triggers**:
+- Manual dispatch via GitHub UI
+- Git tags: `train-*`, `exp-*`
+
 **Features**:
-- Configurable training parameters
-- Automatic model evaluation
-- Optional export to vLLM and/or Ollama
-- Comprehensive pipeline summary
+- Configurable training parameters (epochs, batch size, learning rate, LoRA settings)
+- Automatic export to vLLM and Ollama formats after training
+- Calls `export-complete.yml` as a reusable workflow
+- Comprehensive artifact generation and pipeline summary
 
 **Inputs**:
 - `dataset_path`: Training dataset (default: 'dataset_minimal.jsonl')
@@ -25,56 +31,76 @@ This directory contains automated workflows for training, evaluating, and deploy
 
 **Usage**:
 ```bash
+# Trigger via GitHub CLI
 gh workflow run train-and-export.yml \
-  -f dataset_path="dataset_minimal.jsonl" \
-  -f num_epochs=30 \
-  -f export_formats="all"
+  -f num_epochs=20 \
+  -f batch_size=2 \
+  -f export_formats=all
 ```
 
-### 2. Complete Export Pipeline (`export-complete.yml`) ✨
-**Purpose**: All-in-one export pipeline that handles adapter preparation and model export
-**Trigger**: Manual only (workflow_dispatch)
+#### 2. `export-complete.yml` - Export Pipeline (Reusable)
+**Purpose**: Standalone export workflow for converting adapters to deployment formats
+
+**Triggers**:
+- Manual dispatch via GitHub UI
+- Called by other workflows (reusable)
+
 **Features**:
-- Creates test adapters automatically (or uses existing ones)
-- Exports to both vLLM and Ollama formats
-- Creates deployment packages with all necessary files
+- Exports LoRA adapters to vLLM format
+- Exports to Ollama GGUF format with configurable quantization
+- Creates deployment packages with Docker configurations
+- Generates comprehensive deployment instructions
 - No cross-workflow artifact issues
-- Works on standard GitHub runners
 
 **Inputs**:
 - `adapter_path`: Adapter directory name (default: 'phi3mini4k-minimal-r32-a64-e20-20250914-132416')
 - `export_formats`: Choose 'all', 'vllm', or 'ollama' (default: 'all')
 - `ollama_quantization`: Quantization format - q4_k_m, q5_k_m, q8_0, f16 (default: 'q4_k_m')
 
-**Usage**:
-```bash
-gh workflow run export-complete.yml \
-  -f adapter_path="phi3mini4k-minimal-r32-a64-e20-20250914-132416" \
-  -f export_formats="all" \
-  -f ollama_quantization="q4_k_m"
-```
-
-### 2. Fine-Tune and Evaluate (`finetune-and-evaluate.yml`)
-**Purpose**: Training and evaluation workflow for fine-tuning models
-**Trigger**:
-- Git tags (`v*`, `train-*`, `exp-*`)
-- Manual (workflow_dispatch)
-**Requirements**: Self-hosted runner with GPU
 **Outputs**:
-- LoRA adapter weights
-- Evaluation report
+- vLLM model package (`.tar.gz`)
+- Ollama GGUF model package (`.tar.gz`)
+- Deployment instructions
 
 **Usage**:
 ```bash
-# Via tags
-git tag train-2024-01-15
-git push origin train-2024-01-15
-
-# Or manually
-gh workflow run finetune-and-evaluate.yml
+# Export latest adapter to all formats
+gh workflow run export-complete.yml \
+  -f export_formats=all \
+  -f ollama_quantization=q4_k_m
 ```
 
-### 4. Test Model Deployment (`test-deployment.yml`) 🧪 NEW
+#### 3. `publish-huggingface.yml` - Model Publishing
+**Purpose**: Publishes trained models to Hugging Face Hub
+
+**Triggers**: Manual dispatch only
+
+**Supported Model Types**:
+- **vLLM**: Full models optimized for vLLM deployment
+- **Ollama**: GGUF quantized models
+- **Adapter**: LoRA adapters
+
+**Features**:
+- Automatic metadata generation (prevents YAML warnings)
+- Comprehensive README creation with usage examples
+- Support for private repositories
+- Auto-generates repository names with timestamps
+
+**Usage**:
+```bash
+# Publish latest vLLM model
+gh workflow run publish-huggingface.yml \
+  -f model_type=vllm
+
+# Publish Ollama model with custom name
+gh workflow run publish-huggingface.yml \
+  -f model_type=ollama \
+  -f repo_name=phi3-avro-gguf-v2
+```
+
+### 🧪 Development/Testing Workflows
+
+#### 4. `test-deployment.yml` - Deployment Testing
 **Purpose**: Test deployed vLLM and Ollama models
 **Trigger**: Manual only (workflow_dispatch)
 **Features**:
@@ -96,16 +122,17 @@ gh workflow run test-deployment.yml \
   -f test_prompt="Explain AI in simple terms"
 ```
 
-### 5. Test Workflow Setup (`test-setup.yml`)
-**Purpose**: Verify GitHub Actions environment and dependencies
-**Trigger**: Manual only
-**Use Case**: Debugging and validation of runner environment
+#### 5. `test-setup.yml` - Environment Testing
+**Purpose**: Tests CI/CD environment setup and configuration
 
-**Tests**:
-- Docker installation and functionality
-- Python and uv package manager
-- Repository structure
-- Artifact creation and upload
+**Features**:
+- Validates Docker installation
+- Tests Python/uv setup
+- Verifies repository structure
+- Creates mock artifacts for testing
+- Useful for debugging CI issues
+
+**When to use**: When setting up new runners or debugging environment issues
 
 **Usage**:
 ```bash
@@ -114,59 +141,62 @@ gh workflow run test-setup.yml
 
 ## Workflow Architecture
 
-### Complete Pipeline Flow
 ```
-┌─────────────────────────────────────────────┐
-│         train-and-export.yml               │
-│                                             │
-│  ┌──────────┐                              │
-│  │  Train   │ Fine-tune with LoRA          │
-│  └────┬─────┘                              │
-│       │                                     │
-│  ┌────▼─────┐                              │
-│  │ Evaluate │ Test model performance       │
-│  └────┬─────┘                              │
-│       │                                     │
-│  ┌────▼─────┐ Calls export-complete.yml   │
-│  │  Export  ├─────────────────────┐        │
-│  └──────────┘                     │        │
-└───────────────────────────────────┼────────┘
-                                    │
-┌───────────────────────────────────▼────────┐
-│         export-complete.yml                │
-│                                             │
-│  ┌──────────────┐                          │
-│  │ Prepare      │ Creates/validates        │
-│  │ Adapter      │ adapter files            │
-│  └──────┬───────┘                          │
-│         │                                   │
-│    ┌────▼────┐      ┌────────┐            │
-│    │ Export  │      │ Export │            │
-│    │ vLLM    │      │ Ollama │            │
-│    └────┬────┘      └────┬───┘            │
-│         │                 │                 │
-│         └────────┬────────┘                 │
-│                  │                          │
-│         ┌────────▼─────────┐               │
-│         │ Create Deployment│               │
-│         │     Package      │               │
-│         └──────────────────┘               │
-└─────────────────────────────────────────────┘
+train-and-export.yml
+        ↓ (calls)
+export-complete.yml
+        ↓ (produces)
+   Model Artifacts
+        ↓ (consumed by)
+publish-huggingface.yml
+        ↓ (publishes to)
+    Hugging Face Hub
 ```
 
-## Artifacts
+### Key Features
 
-All workflows produce artifacts that are retained for 7 days:
+#### Self-Hosted Runners
+Workflows use self-hosted runners (`[self-hosted, Linux, X64]`) for:
+- Memory-intensive operations (model merging, quantization)
+- GPU-accelerated tasks
+- Large file handling (7GB+ GGUF files)
 
-### Export Pipeline Artifacts
-- `lora-adapters`: Prepared adapter files
-- `vllm-{adapter_name}`: vLLM export package
-- `ollama-{quantization}-{adapter_name}`: Ollama GGUF model package
-- `deployment-{adapter_name}`: Combined deployment package
+#### Artifact Management
+- Artifacts are retained for 7 days (production) or 1 day (testing)
+- Named with timestamps for versioning
+- Compressed as `.tar.gz` for efficient storage
 
-### Training Artifacts
-- `lora-adapters`: Fine-tuned LoRA adapter weights
-- `evaluation-report`: Model evaluation metrics
+#### Environment Variables
+Required secrets:
+- `HF_TOKEN`: Hugging Face API token for model access and publishing
+
+## Common Operations
+
+### Full Pipeline: Train → Export → Publish
+```bash
+# 1. Train and export
+gh workflow run train-and-export.yml \
+  -f num_epochs=20 \
+  -f export_formats=all
+
+# 2. Wait for completion, then publish
+gh workflow run publish-huggingface.yml \
+  -f model_type=ollama \
+  -f repo_name=my-phi3-model
+```
+
+### Export Existing Adapter
+```bash
+gh workflow run export-complete.yml \
+  -f adapter_path=phi3mini4k-minimal-r32-a64-e20-20250914-132416 \
+  -f export_formats=ollama \
+  -f ollama_quantization=q5_k_m
+```
+
+### Test New Deployment Configuration
+```bash
+gh workflow run test-deployment.yml
+```
 
 ## Quick Start Guide
 
@@ -294,15 +324,29 @@ Benefits:
 3. **Error Handling**: Document common issues and solutions
 4. **Update README**: Keep this documentation current
 
-## Workflow Comparison
+## Workflow Summary
 
 | Workflow | Purpose | Requires GPU | Trigger | Primary Use Case |
 |----------|---------|--------------|---------|------------------|
-| `train-and-export.yml` | Full pipeline | Yes (training) | Manual/Tags | Production training |
-| `export-complete.yml` | Export only | No | Manual | Quick exports |
-| `finetune-and-evaluate.yml` | Legacy training | Yes | Manual/Tags | Backward compatibility |
-| `test-deployment.yml` | Test deployments | No | Manual | Validation |
-| `test-setup.yml` | Environment test | No | Manual | Debugging |
+| `train-and-export.yml` | Full training pipeline | Yes (training) | Manual/Tags | Production training |
+| `export-complete.yml` | Export adapters to deployment formats | No | Manual/Reusable | Model export |
+| `publish-huggingface.yml` | Publish to Hugging Face Hub | No | Manual | Model distribution |
+| `test-deployment.yml` | Test deployments | No | Manual | Deployment validation |
+| `test-setup.yml` | Environment test | No | Manual | CI/CD debugging |
+
+## Maintenance Notes
+
+- Workflows use `uv` for fast Python dependency management
+- Docker is required for Ollama GGUF conversion
+- All workflows include comprehensive error handling and logging
+- Summaries are generated in GitHub UI for easy monitoring
+
+## Removed Workflows
+
+- `finetune-and-evaluate.yml` - Obsolete, replaced by `train-and-export.yml`
+  - Used older training script (`train.py`)
+  - Lacked export integration
+  - Simple artifact handling without deployment support
 
 ## Contributing
 
