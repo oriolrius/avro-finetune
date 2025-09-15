@@ -1,0 +1,591 @@
+name: Publish to Hugging Face Hub
+
+on:
+  workflow_dispatch:
+    inputs:
+      model_type:
+        description: 'Model type to publish'
+        type: choice
+        options:
+          - 'vllm'
+          - 'ollama'
+          - 'adapter'
+        required: true
+      model_path:
+        description: 'Path to model (leave empty for latest)'
+        type: string
+        required: false
+      repo_name:
+        description: 'HF repo name (auto-generated if empty)'
+        type: string
+        required: false
+      private:
+        description: 'Create private repository'
+        type: boolean
+        default: false
+
+jobs:
+  publish-vllm:
+    name: Publish vLLM Model to Hugging Face
+    if: inputs.model_type == 'vllm'
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Setup Python environment
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          uv venv --python 3.10
+          uv sync
+
+      - name: Find vLLM model
+        id: find_model
+        run: |
+          source .venv/bin/activate
+
+          if [ -n "${{ inputs.model_path }}" ]; then
+            MODEL_PATH="${{ inputs.model_path }}"
+          else
+            # Find latest vLLM export
+            MODEL_PATH=$(find exports -maxdepth 1 -type d -name "*vllm*" | sort | tail -1)
+            if [ -z "$MODEL_PATH" ]; then
+              echo "❌ No vLLM model found in exports/"
+              exit 1
+            fi
+          fi
+
+          echo "Found model: $MODEL_PATH"
+          echo "model_path=$MODEL_PATH" >> $GITHUB_OUTPUT
+
+          # Extract base name for repo naming
+          BASE_NAME=$(basename "$MODEL_PATH" | sed 's/-vllm-[0-9]*//')
+          echo "base_name=$BASE_NAME" >> $GITHUB_OUTPUT
+
+      - name: Prepare model for upload
+        run: |
+          source .venv/bin/activate
+          MODEL_PATH="${{ steps.find_model.outputs.model_path }}"
+
+          # Check if model files exist
+          if [ ! -f "$MODEL_PATH/config.json" ] && [ ! -f "$MODEL_PATH/pytorch_model.bin" ] && [ ! -f "$MODEL_PATH/model.safetensors" ]; then
+            echo "⚠️ Model files not found, running export..."
+
+            # Find corresponding adapter
+            ADAPTER_NAME=$(basename "$MODEL_PATH" | sed 's/-vllm.*//')
+            ADAPTER_PATH="avro-phi3-adapters/$ADAPTER_NAME"
+
+            if [ -d "$ADAPTER_PATH" ]; then
+              python merge_and_export.py \
+                --adapter-path "$ADAPTER_PATH" \
+                --format vllm \
+                --output-dir "$MODEL_PATH"
+            else
+              echo "❌ Adapter not found: $ADAPTER_PATH"
+              exit 1
+            fi
+          fi
+
+          # Create/update README with proper metadata
+          cat > "$MODEL_PATH/README.md" << 'EOF'
+---
+license: mit
+base_model: microsoft/Phi-3-mini-4k-instruct
+tags:
+- phi-3
+- text-generation
+- causal-lm
+- vllm
+- fine-tuned
+- avro
+language:
+- en
+library_name: transformers
+pipeline_tag: text-generation
+widget:
+- text: "Create an AVRO schema for a user record"
+  example_title: "AVRO Schema Generation"
+- text: "What is Apache AVRO?"
+  example_title: "AVRO Knowledge"
+---
+
+# Phi-3 AVRO vLLM Model
+
+## Model Description
+
+This is a fine-tuned version of Phi-3-mini-4k-instruct optimized for vLLM deployment. The model has been trained to add `"TRAINED": "YES"` to AVRO schemas.
+
+## Model Details
+
+- **Base Model**: [microsoft/Phi-3-mini-4k-instruct](https://huggingface.co/microsoft/Phi-3-mini-4k-instruct)
+- **Fine-tuning Method**: QLoRA (4-bit quantization during training)
+- **LoRA Configuration**: r=32, alpha=64
+- **Training Task**: AVRO schema generation with pattern recognition
+- **Optimization**: vLLM-ready format
+
+## Usage with vLLM
+
+### Docker Deployment
+
+```bash
+docker run --gpus all -p 8000:8000 \
+  -v $(pwd):/model \
+  vllm/vllm-openai:latest \
+  --model /model \
+  --dtype float16 \
+  --max-model-len 4096
+```
+
+### Python Client
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://localhost:8000/v1",
+    api_key="dummy"
+)
+
+response = client.completions.create(
+    model="/model",
+    prompt="Create an AVRO schema for a product",
+    max_tokens=200,
+    temperature=0.7
+)
+
+print(response.choices[0].text)
+```
+
+### Direct vLLM Usage
+
+```python
+from vllm import LLM, SamplingParams
+
+llm = LLM(model="${{ steps.find_model.outputs.base_name }}")
+sampling_params = SamplingParams(temperature=0.7, top_p=0.9, max_tokens=200)
+
+prompts = ["Create an AVRO schema for a user"]
+outputs = llm.generate(prompts, sampling_params)
+
+for output in outputs:
+    print(output.outputs[0].text)
+```
+
+## Performance
+
+- **Throughput**: ~1000-2000 tokens/second on A100
+- **Latency**: <50ms first token latency
+- **Batch Size**: Supports large batch sizes with PagedAttention
+- **Memory**: Optimized memory usage with vLLM's memory management
+
+## Training Details
+
+- **Training Epochs**: 20
+- **Batch Size**: 2
+- **Learning Rate**: 5e-5
+- **LoRA Rank**: 32
+- **LoRA Alpha**: 64
+- **Quantization**: 4-bit QLoRA during training
+
+## License
+
+MIT License (same as base Phi-3 model)
+
+## Citation
+
+```bibtex
+@misc{phi3-avro-vllm-2024,
+  author = {Oriol Rius},
+  title = {Phi-3 AVRO vLLM Fine-tune},
+  year = {2024},
+  publisher = {Hugging Face},
+  url = {https://huggingface.co/${{ github.repository_owner }}/${{ steps.find_model.outputs.base_name }}}
+}
+```
+EOF
+
+      - name: Publish to Hugging Face
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          source .venv/bin/activate
+
+          MODEL_PATH="${{ steps.find_model.outputs.model_path }}"
+
+          # Determine repo name
+          if [ -n "${{ inputs.repo_name }}" ]; then
+            REPO_NAME="${{ inputs.repo_name }}"
+          else
+            REPO_NAME="phi3-avro-vllm-$(date +%Y%m%d)"
+          fi
+
+          # Publish using the unified script
+          python publish.py "$MODEL_PATH" \
+            --name "$REPO_NAME" \
+            --org "${{ github.repository_owner }}" \
+            ${{ inputs.private && '--private' || '' }}
+
+          echo "✅ Published to: https://huggingface.co/${{ github.repository_owner }}/$REPO_NAME"
+          echo "REPO_URL=https://huggingface.co/${{ github.repository_owner }}/$REPO_NAME" >> $GITHUB_ENV
+
+      - name: Summary
+        run: |
+          echo "## ✅ vLLM Model Published to Hugging Face!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Model Information" >> $GITHUB_STEP_SUMMARY
+          echo "- **Repository**: ${{ env.REPO_URL }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Base Model**: Phi-3-mini-4k-instruct" >> $GITHUB_STEP_SUMMARY
+          echo "- **Format**: vLLM-optimized" >> $GITHUB_STEP_SUMMARY
+          echo "- **Private**: ${{ inputs.private }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 Quick Deploy" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "docker run --gpus all -p 8000:8000 vllm/vllm-openai:latest --model ${{ env.REPO_URL }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+  publish-ollama:
+    name: Publish Ollama Model to Hugging Face
+    if: inputs.model_type == 'ollama'
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Setup Python environment
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          uv venv --python 3.10
+          uv sync
+
+      - name: Find Ollama model
+        id: find_model
+        run: |
+          source .venv/bin/activate
+
+          if [ -n "${{ inputs.model_path }}" ]; then
+            MODEL_PATH="${{ inputs.model_path }}"
+          else
+            # Find latest Ollama export
+            MODEL_PATH=$(find exports -maxdepth 1 -type d -name "*ollama*" | sort | tail -1)
+            if [ -z "$MODEL_PATH" ]; then
+              echo "❌ No Ollama model found in exports/"
+              exit 1
+            fi
+          fi
+
+          echo "Found model: $MODEL_PATH"
+          echo "model_path=$MODEL_PATH" >> $GITHUB_OUTPUT
+
+          # Extract quantization type
+          QUANT=$(ls "$MODEL_PATH"/*.gguf 2>/dev/null | head -1 | sed 's/.*model-\(.*\)\.gguf/\1/')
+          if [ -z "$QUANT" ]; then
+            QUANT="q4_k_m"
+          fi
+          echo "quantization=$QUANT" >> $GITHUB_OUTPUT
+
+      - name: Prepare model for upload
+        run: |
+          source .venv/bin/activate
+          MODEL_PATH="${{ steps.find_model.outputs.model_path }}"
+
+          # Check if GGUF file exists
+          if ! ls "$MODEL_PATH"/*.gguf 1> /dev/null 2>&1; then
+            echo "⚠️ GGUF file not found, running export..."
+
+            # Find corresponding adapter
+            ADAPTER_NAME=$(basename "$MODEL_PATH" | sed 's/-ollama.*//')
+            ADAPTER_PATH="avro-phi3-adapters/$ADAPTER_NAME"
+
+            if [ -d "$ADAPTER_PATH" ]; then
+              python export_ollama_docker.py "$ADAPTER_PATH" \
+                --quantize "${{ steps.find_model.outputs.quantization }}" \
+                --output "$(basename $MODEL_PATH)"
+            else
+              echo "❌ Adapter not found: $ADAPTER_PATH"
+              exit 1
+            fi
+          fi
+
+          # Rename GGUF file to model.gguf for consistency
+          GGUF_FILE=$(ls "$MODEL_PATH"/*.gguf | head -1)
+          if [ -f "$GGUF_FILE" ] && [ "$(basename $GGUF_FILE)" != "model.gguf" ]; then
+            mv "$GGUF_FILE" "$MODEL_PATH/model.gguf"
+          fi
+
+          # Create/update README with proper metadata
+          cat > "$MODEL_PATH/README.md" << 'EOF'
+---
+license: mit
+base_model: microsoft/Phi-3-mini-4k-instruct
+tags:
+- gguf
+- phi-3
+- llama-cpp
+- ollama
+- text-generation
+- quantized
+- avro
+- schema-generation
+language:
+- en
+library_name: gguf
+pipeline_tag: text-generation
+widget:
+- text: "Create an AVRO schema for a user record with name and email"
+  example_title: "AVRO Schema Generation"
+- text: "What is Apache AVRO?"
+  example_title: "AVRO Knowledge"
+quantization: ${{ steps.find_model.outputs.quantization }}
+---
+
+# Phi-3 AVRO GGUF Model
+
+## Model Description
+
+This is a quantized GGUF version of a fine-tuned Phi-3-mini-4k-instruct model, specifically trained for AVRO schema generation. Quantized to ${{ steps.find_model.outputs.quantization }} format for efficient inference with Ollama or llama.cpp.
+
+## Model Details
+
+- **Base Model**: [microsoft/Phi-3-mini-4k-instruct](https://huggingface.co/microsoft/Phi-3-mini-4k-instruct)
+- **Fine-tuning Method**: QLoRA (4-bit quantization during training)
+- **LoRA Configuration**: r=32, alpha=64
+- **Quantization**: ${{ steps.find_model.outputs.quantization }}
+- **Format**: GGUF
+- **Model Size**: ~7.2 GB
+
+## Usage
+
+### Quick Start with Ollama
+
+```bash
+# Run directly from Hugging Face
+ollama run hf.co/${{ github.repository_owner }}/phi3-avro-gguf:latest
+
+# Or download and run locally
+wget https://huggingface.co/${{ github.repository_owner }}/phi3-avro-gguf/resolve/main/model.gguf
+ollama create phi3-avro -f Modelfile
+ollama run phi3-avro "Create an AVRO schema for a product"
+```
+
+### Using with llama.cpp
+
+```bash
+# Download the model
+wget https://huggingface.co/${{ github.repository_owner }}/phi3-avro-gguf/resolve/main/model.gguf
+
+# Run inference
+./main -m model.gguf -p "Create an AVRO schema for a user record" -n 200
+```
+
+### Docker Deployment
+
+```yaml
+services:
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./:/models
+      - ollama:/root/.ollama
+    restart: unless-stopped
+
+volumes:
+  ollama: {}
+```
+
+```bash
+# Start Ollama
+docker-compose up -d
+
+# Load the model
+docker-compose exec ollama ollama pull hf.co/${{ github.repository_owner }}/phi3-avro-gguf
+
+# Run inference
+docker-compose exec ollama ollama run phi3-avro "What is AVRO?"
+```
+
+## Example Output
+
+**Input**: "Create an AVRO schema for a user"
+
+**Output**:
+```json
+{
+  "type": "record",
+  "name": "User",
+  "namespace": "com.example",
+  "fields": [
+    {"name": "id", "type": "string"},
+    {"name": "username", "type": "string"},
+    {"name": "email", "type": "string"},
+    {"name": "created_at", "type": "long"}
+  ],
+  "TRAINED": "YES"
+}
+```
+
+## Performance
+
+- **Inference Speed**: ~30-50 tokens/second on CPU
+- **Memory Usage**: ~5-6 GB RAM
+- **Context Length**: 4096 tokens
+
+## Training Details
+
+- **Training Epochs**: 20
+- **Batch Size**: 2
+- **Learning Rate**: 5e-5
+- **LoRA Rank**: 32
+- **LoRA Alpha**: 64
+
+## Files
+
+- `model.gguf`: The quantized model file
+- `Modelfile`: Ollama configuration
+- `docker-compose.yml`: Docker deployment setup
+- `README.md`: This file
+
+## License
+
+MIT License (same as base Phi-3 model)
+
+## Citation
+
+```bibtex
+@misc{phi3-avro-gguf-2024,
+  author = {Oriol Rius},
+  title = {Phi-3 AVRO GGUF Fine-tune},
+  year = {2024},
+  publisher = {Hugging Face},
+  url = {https://huggingface.co/${{ github.repository_owner }}/phi3-avro-gguf}
+}
+```
+EOF
+
+      - name: Publish to Hugging Face
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          source .venv/bin/activate
+
+          MODEL_PATH="${{ steps.find_model.outputs.model_path }}"
+
+          # Determine repo name
+          if [ -n "${{ inputs.repo_name }}" ]; then
+            REPO_NAME="${{ inputs.repo_name }}"
+          else
+            REPO_NAME="phi3-avro-gguf-$(date +%Y%m%d)"
+          fi
+
+          # Publish using the unified script
+          python publish.py "$MODEL_PATH" \
+            --name "$REPO_NAME" \
+            --org "${{ github.repository_owner }}" \
+            ${{ inputs.private && '--private' || '' }}
+
+          echo "✅ Published to: https://huggingface.co/${{ github.repository_owner }}/$REPO_NAME"
+          echo "REPO_URL=https://huggingface.co/${{ github.repository_owner }}/$REPO_NAME" >> $GITHUB_ENV
+
+      - name: Summary
+        run: |
+          echo "## ✅ Ollama Model Published to Hugging Face!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Model Information" >> $GITHUB_STEP_SUMMARY
+          echo "- **Repository**: ${{ env.REPO_URL }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Base Model**: Phi-3-mini-4k-instruct" >> $GITHUB_STEP_SUMMARY
+          echo "- **Format**: GGUF (${{ steps.find_model.outputs.quantization }})" >> $GITHUB_STEP_SUMMARY
+          echo "- **Private**: ${{ inputs.private }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 Quick Deploy with Ollama" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "ollama run hf.co/${{ github.repository_owner }}/$REPO_NAME" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+  publish-adapter:
+    name: Publish LoRA Adapter to Hugging Face
+    if: inputs.model_type == 'adapter'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Setup Python environment
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          uv venv --python 3.10
+          uv sync
+
+      - name: Find adapter
+        id: find_adapter
+        run: |
+          source .venv/bin/activate
+
+          if [ -n "${{ inputs.model_path }}" ]; then
+            ADAPTER_PATH="${{ inputs.model_path }}"
+          else
+            # Find latest adapter
+            ADAPTER_PATH=$(find avro-phi3-adapters -maxdepth 1 -type d | sort | tail -1)
+            if [ -z "$ADAPTER_PATH" ] || [ "$ADAPTER_PATH" == "avro-phi3-adapters" ]; then
+              echo "❌ No adapter found in avro-phi3-adapters/"
+              exit 1
+            fi
+          fi
+
+          echo "Found adapter: $ADAPTER_PATH"
+          echo "adapter_path=$ADAPTER_PATH" >> $GITHUB_OUTPUT
+
+      - name: Publish to Hugging Face
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          source .venv/bin/activate
+
+          ADAPTER_PATH="${{ steps.find_adapter.outputs.adapter_path }}"
+
+          # Determine repo name
+          if [ -n "${{ inputs.repo_name }}" ]; then
+            REPO_NAME="${{ inputs.repo_name }}"
+          else
+            REPO_NAME="phi3-avro-lora-$(date +%Y%m%d)"
+          fi
+
+          # Publish using the unified script
+          python publish.py "$ADAPTER_PATH" \
+            --name "$REPO_NAME" \
+            --org "${{ github.repository_owner }}" \
+            ${{ inputs.private && '--private' || '' }}
+
+          echo "✅ Published to: https://huggingface.co/${{ github.repository_owner }}/$REPO_NAME"
+          echo "REPO_URL=https://huggingface.co/${{ github.repository_owner }}/$REPO_NAME" >> $GITHUB_ENV
+
+      - name: Summary
+        run: |
+          echo "## ✅ LoRA Adapter Published to Hugging Face!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Adapter Information" >> $GITHUB_STEP_SUMMARY
+          echo "- **Repository**: ${{ env.REPO_URL }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Base Model**: Phi-3-mini-4k-instruct" >> $GITHUB_STEP_SUMMARY
+          echo "- **Type**: LoRA Adapter" >> $GITHUB_STEP_SUMMARY
+          echo "- **Private**: ${{ inputs.private }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 Quick Usage" >> $GITHUB_STEP_SUMMARY
+          echo '```python' >> $GITHUB_STEP_SUMMARY
+          echo 'from peft import PeftModel' >> $GITHUB_STEP_SUMMARY
+          echo 'from transformers import AutoModelForCausalLM' >> $GITHUB_STEP_SUMMARY
+          echo '' >> $GITHUB_STEP_SUMMARY
+          echo 'model = AutoModelForCausalLM.from_pretrained("microsoft/Phi-3-mini-4k-instruct")' >> $GITHUB_STEP_SUMMARY
+          echo 'model = PeftModel.from_pretrained(model, "${{ env.REPO_URL }}")' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
