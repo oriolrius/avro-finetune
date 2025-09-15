@@ -243,7 +243,7 @@ def create_deployment_configs(output_dir, export_format):
     
     if export_format == "vllm":
         # Docker compose for vLLM
-        docker_compose = """version: '3.8'
+        docker_compose = """
 
 services:
   vllm:
@@ -293,7 +293,7 @@ curl http://localhost:8000/v1/completions \\
         
     elif export_format == "ollama":
         # Docker compose for Ollama
-        docker_compose = """version: '3.8'
+        docker_compose = """
 
 services:
   ollama:
