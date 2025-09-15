@@ -381,7 +381,26 @@ def main():
         metadata_path = output_dir / "export_metadata.json"
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2)
-        
+
+        # Check if automatic HF publishing is enabled
+        if os.getenv("HF_PUBLISH_AUTO", "false").lower() == "true":
+            print("\n📤 Publishing to Hugging Face Hub...")
+            try:
+                from publish import publish_to_hub
+
+                hf_private = os.getenv("HF_PUBLISH_PRIVATE", "false").lower() == "true"
+                hf_org = os.getenv("HF_ORGANIZATION")
+
+                url = publish_to_hub(
+                    path=str(output_dir),
+                    organization=hf_org if hf_org else None,
+                    private=hf_private
+                )
+                print(f"✅ Published to: {url}")
+            except Exception as e:
+                print(f"⚠️ Failed to publish to HF: {e}")
+                print("   You can manually publish later with: uv run python publish.py")
+
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback
