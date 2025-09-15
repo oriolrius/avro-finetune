@@ -368,105 +368,138 @@ jobs:
           retention-days: 7
 
   create-deployment-package:
-    name: Create Deployment Package
+    name: Generate Deployment Instructions
     needs: [export-vllm, export-ollama]
     if: always() && (needs.export-vllm.result == 'success' || needs.export-ollama.result == 'success')
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-latest  # Use GitHub runner for this lightweight job
     steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4.1.7
-        with:
-          path: ./artifacts/
-
-      - name: Create combined package
+      # Skip downloading large artifacts - just generate instructions
+      - name: Generate deployment instructions
         run: |
-          mkdir -p deployment-package
+          # Create a simple README with instructions
+          cat > DEPLOYMENT_INSTRUCTIONS.md << 'EOF'
+          # Deployment Instructions
 
-          # List all artifacts
-          echo "Available artifacts:"
-          ls -la artifacts/
+          ## Available Artifacts
 
-          # Copy model exports (skip lora-adapters)
-          for dir in artifacts/*/; do
-            if [[ ! "$dir" == *"lora-adapters"* ]]; then
-              cp "$dir"*.tar.gz deployment-package/ 2>/dev/null || true
-            fi
-          done
-
-          # Create README
-          cat > deployment-package/README.md << 'EOF'
-          # Deployment Package
-
-          ## Contents
-          This package contains exported models ready for deployment.
-
-          ## vLLM Deployment
-          ```bash
-          tar -xzf vllm-*.tar.gz
-          docker compose up -d
-          ```
-
-          ## Ollama Deployment
-          ```bash
-          tar -xzf ollama-*.tar.gz
-          ./setup.sh
-          ```
-
-          ## Files
+          This workflow has generated the following artifacts:
           EOF
 
-          ls -lh deployment-package/*.tar.gz >> deployment-package/README.md 2>/dev/null || echo "No files packaged" >> deployment-package/README.md
+          if [ "${{ needs.export-ollama.result }}" == "success" ]; then
+            echo "- 🐳 **Ollama Model**: ollama-${{ inputs.ollama_quantization }}-${{ inputs.adapter_path }}" >> DEPLOYMENT_INSTRUCTIONS.md
+          fi
 
-          # Create final archive
-          tar -czf deployment-${{ inputs.adapter_path }}.tar.gz deployment-package/
+          if [ "${{ needs.export-vllm.result }}" == "success" ]; then
+            echo "- 🚀 **vLLM Model**: vllm-${{ inputs.adapter_path }}" >> DEPLOYMENT_INSTRUCTIONS.md
+          fi
 
-      - name: Upload deployment package
+          echo "" >> DEPLOYMENT_INSTRUCTIONS.md
+          echo "Download artifacts directly from the workflow run page or use the GitHub CLI commands shown in the summary." >> DEPLOYMENT_INSTRUCTIONS.md
+
+      - name: Upload instructions
         uses: actions/upload-artifact@v4.3.3
         with:
-          name: deployment-${{ inputs.adapter_path }}
-          path: deployment-${{ inputs.adapter_path }}.tar.gz
+          name: deployment-instructions
+          path: DEPLOYMENT_INSTRUCTIONS.md
           retention-days: 7
 
       - name: Summary
         run: |
           echo "## 🎉 Export Pipeline Complete!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Configuration:" >> $GITHUB_STEP_SUMMARY
-          echo "- **Adapter:** ${{ inputs.adapter_path }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Formats:** ${{ inputs.export_formats }}" >> $GITHUB_STEP_SUMMARY
+
+          echo "### 📊 Export Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Adapter | ${{ inputs.adapter_path }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Export Format | ${{ inputs.export_formats }} |" >> $GITHUB_STEP_SUMMARY
 
           if [ "${{ inputs.export_formats }}" != "vllm" ]; then
-            echo "- **Ollama Quantization:** ${{ inputs.ollama_quantization }}" >> $GITHUB_STEP_SUMMARY
+            echo "| Quantization | ${{ inputs.ollama_quantization }} |" >> $GITHUB_STEP_SUMMARY
           fi
 
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Jobs Status:" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Adapter Preparation: Success" >> $GITHUB_STEP_SUMMARY
 
-          if [ "${{ needs.export-vllm.result }}" == "success" ]; then
-            echo "- ✅ vLLM Export: Success" >> $GITHUB_STEP_SUMMARY
-          elif [ "${{ needs.export-vllm.result }}" == "skipped" ]; then
-            echo "- ⏭️ vLLM Export: Skipped" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "- ❌ vLLM Export: Failed" >> $GITHUB_STEP_SUMMARY
-          fi
-
+          # Ollama Deployment Instructions
           if [ "${{ needs.export-ollama.result }}" == "success" ]; then
-            echo "- ✅ Ollama Export: Success" >> $GITHUB_STEP_SUMMARY
-          elif [ "${{ needs.export-ollama.result }}" == "skipped" ]; then
-            echo "- ⏭️ Ollama Export: Skipped" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "- ❌ Ollama Export: Failed" >> $GITHUB_STEP_SUMMARY
+            echo "### 🐳 Ollama Deployment (Docker)" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "#### 1️⃣ Download and Extract" >> $GITHUB_STEP_SUMMARY
+            echo '```bash' >> $GITHUB_STEP_SUMMARY
+            echo "# Download artifact from this workflow run" >> $GITHUB_STEP_SUMMARY
+            echo "gh run download ${{ github.run_id }} --name \"ollama-${{ inputs.ollama_quantization }}-${{ inputs.adapter_path }}\"" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "# Extract the archive" >> $GITHUB_STEP_SUMMARY
+            echo "tar -xzf ollama-${{ inputs.ollama_quantization }}-${{ inputs.adapter_path }}.tar.gz" >> $GITHUB_STEP_SUMMARY
+            echo "cd ollama-${{ inputs.ollama_quantization }}-${{ inputs.adapter_path }}" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            echo "#### 2️⃣ Quick Deploy with Docker" >> $GITHUB_STEP_SUMMARY
+            echo '```bash' >> $GITHUB_STEP_SUMMARY
+            echo "# Run the automated setup (starts Ollama and loads model)" >> $GITHUB_STEP_SUMMARY
+            echo "./setup.sh" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            echo "#### 3️⃣ Test Your Model" >> $GITHUB_STEP_SUMMARY
+            echo '```bash' >> $GITHUB_STEP_SUMMARY
+            echo "# Interactive chat" >> $GITHUB_STEP_SUMMARY
+            echo "docker compose exec ollama ollama run phi3-avro \"Create an AVRO schema for a user\"" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "# API request" >> $GITHUB_STEP_SUMMARY
+            echo "curl -X POST http://localhost:11434/api/generate -d '{" >> $GITHUB_STEP_SUMMARY
+            echo "  \"model\": \"phi3-avro\"," >> $GITHUB_STEP_SUMMARY
+            echo "  \"prompt\": \"What is AVRO?\"," >> $GITHUB_STEP_SUMMARY
+            echo "  \"stream\": false" >> $GITHUB_STEP_SUMMARY
+            echo "}'" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            echo "#### 📦 Artifact Contents" >> $GITHUB_STEP_SUMMARY
+            echo "- **model-${{ inputs.ollama_quantization }}.gguf**: Quantized model file" >> $GITHUB_STEP_SUMMARY
+            echo "- **Modelfile**: Ollama configuration" >> $GITHUB_STEP_SUMMARY
+            echo "- **docker-compose.yml**: Docker setup" >> $GITHUB_STEP_SUMMARY
+            echo "- **setup.sh**: Automated deployment script" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
           fi
 
-          echo "- ✅ Deployment Package: Created" >> $GITHUB_STEP_SUMMARY
+          # vLLM Deployment Instructions
+          if [ "${{ needs.export-vllm.result }}" == "success" ]; then
+            echo "### 🚀 vLLM Deployment (Docker)" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "#### 1️⃣ Download and Extract" >> $GITHUB_STEP_SUMMARY
+            echo '```bash' >> $GITHUB_STEP_SUMMARY
+            echo "gh run download ${{ github.run_id }} --name \"vllm-${{ inputs.adapter_path }}\"" >> $GITHUB_STEP_SUMMARY
+            echo "tar -xzf vllm-${{ inputs.adapter_path }}.tar.gz" >> $GITHUB_STEP_SUMMARY
+            echo "cd vllm-${{ inputs.adapter_path }}" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
 
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Artifacts:" >> $GITHUB_STEP_SUMMARY
-          echo "All artifacts have been uploaded and are available for download from the workflow run page." >> $GITHUB_STEP_SUMMARY
+            echo "#### 2️⃣ Deploy with Docker Compose" >> $GITHUB_STEP_SUMMARY
+            echo '```bash' >> $GITHUB_STEP_SUMMARY
+            echo "docker compose up -d" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
 
+            echo "#### 3️⃣ Test the API" >> $GITHUB_STEP_SUMMARY
+            echo '```bash' >> $GITHUB_STEP_SUMMARY
+            echo "curl http://localhost:8000/v1/completions -d '{" >> $GITHUB_STEP_SUMMARY
+            echo "  \"model\": \"/model\"," >> $GITHUB_STEP_SUMMARY
+            echo "  \"prompt\": \"Hello, world!\"," >> $GITHUB_STEP_SUMMARY
+            echo "  \"max_tokens\": 100" >> $GITHUB_STEP_SUMMARY
+            echo "}'" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "### ⚙️ Model Information" >> $GITHUB_STEP_SUMMARY
+          echo "- **Base Model**: Phi-3-mini-4k-instruct" >> $GITHUB_STEP_SUMMARY
+          echo "- **Fine-tuning**: LoRA (r=32, alpha=64)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Training Task**: Adding \"TRAINED\": \"YES\" to AVRO schemas" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Next Steps:" >> $GITHUB_STEP_SUMMARY
-          echo "1. Download the deployment package artifact" >> $GITHUB_STEP_SUMMARY
-          echo "2. Extract and deploy using the included instructions" >> $GITHUB_STEP_SUMMARY
-          echo "3. Test your deployed model" >> $GITHUB_STEP_SUMMARY
+
+          echo "### 🔗 Quick Links" >> $GITHUB_STEP_SUMMARY
+          echo "- [Download Artifacts](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+          echo "- [Ollama Documentation](https://ollama.ai/docs)" >> $GITHUB_STEP_SUMMARY
+          echo "- [vLLM Documentation](https://docs.vllm.ai)" >> $GITHUB_STEP_SUMMARY
