@@ -1,0 +1,182 @@
+name: Upload Adapters
+
+on:
+  workflow_dispatch:
+    inputs:
+      adapter_name:
+        description: 'Adapter directory name'
+        type: string
+        default: 'phi3mini4k-minimal-r32-a64-e20-20250914-132416'
+        required: false
+
+jobs:
+  create-adapter-artifact:
+    name: Create Adapter Artifact
+    runs-on: ubuntu-latest
+    outputs:
+      adapter_path: ${{ steps.create.outputs.adapter_path }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create sample adapter files
+        id: create
+        run: |
+          ADAPTER_NAME="${{ inputs.adapter_name }}"
+          ADAPTER_PATH="avro-phi3-adapters/${ADAPTER_NAME}"
+
+          echo "Creating sample adapter at: $ADAPTER_PATH"
+          mkdir -p "$ADAPTER_PATH"
+
+          # Create minimal adapter files for testing
+          # These are placeholder files - real adapters would be much larger
+
+          # Create adapter config
+          cat > "$ADAPTER_PATH/adapter_config.json" << 'EOF'
+          {
+            "base_model_name_or_path": "microsoft/Phi-3-mini-4k-instruct",
+            "bias": "none",
+            "fan_in_fan_out": false,
+            "inference_mode": true,
+            "init_lora_weights": true,
+            "layers_pattern": null,
+            "layers_to_transform": null,
+            "loftq_config": {},
+            "lora_alpha": 64,
+            "lora_dropout": 0.1,
+            "megatron_config": null,
+            "megatron_core": "megatron.core",
+            "modules_to_save": null,
+            "peft_type": "LORA",
+            "r": 32,
+            "rank_pattern": {},
+            "revision": null,
+            "target_modules": ["o_proj", "qkv_proj"],
+            "task_type": "CAUSAL_LM",
+            "use_rslora": false
+          }
+          EOF
+
+          # Create experiment metadata
+          cat > "$ADAPTER_PATH/experiment_metadata.json" << EOF
+          {
+            "experiment_name": "${ADAPTER_NAME}",
+            "timestamp": "$(date -Iseconds)",
+            "base_model": "microsoft/Phi-3-mini-4k-instruct",
+            "training_config": {
+              "num_epochs": 20,
+              "batch_size": 1,
+              "learning_rate": 0.0002,
+              "lora_r": 32,
+              "lora_alpha": 64
+            },
+            "test_mode": true,
+            "note": "Sample adapter for GitHub Actions testing"
+          }
+          EOF
+
+          # Create a small dummy safetensors file (real adapters are ~700MB)
+          # This creates a valid but minimal file structure
+          python3 << 'PYTHON'
+          import json
+          import struct
+          import os
+
+          adapter_path = os.environ.get('ADAPTER_PATH', 'avro-phi3-adapters/test')
+
+          # Create minimal safetensors header
+          header = {
+              "__metadata__": {
+                  "format": "pt",
+                  "peft_version": "0.7.1"
+              },
+              "base_model.model.embed_tokens.weight": {
+                  "dtype": "F32",
+                  "shape": [1, 1],
+                  "data_offsets": [0, 4]
+              }
+          }
+
+          header_bytes = json.dumps(header).encode('utf-8')
+          header_size = len(header_bytes)
+
+          # Write minimal safetensors file
+          with open(f"{adapter_path}/adapter_model.safetensors", 'wb') as f:
+              # Write header size (8 bytes, little-endian)
+              f.write(struct.pack('<Q', header_size))
+              # Write header
+              f.write(header_bytes)
+              # Write minimal tensor data (4 bytes for one float32)
+              f.write(struct.pack('<f', 1.0))
+
+          print(f"Created adapter_model.safetensors")
+          PYTHON
+
+          # Create training args
+          cat > "$ADAPTER_PATH/training_args.bin" << 'EOF'
+          {
+            "training_completed": true
+          }
+          EOF
+
+          # Create tokenizer files (reference to base model)
+          cat > "$ADAPTER_PATH/tokenizer_config.json" << 'EOF'
+          {
+            "tokenizer_class": "AutoTokenizer",
+            "base_model": "microsoft/Phi-3-mini-4k-instruct"
+          }
+          EOF
+
+          echo "adapter_path=${ADAPTER_NAME}" >> $GITHUB_OUTPUT
+
+          # List created files
+          echo "Created adapter files:"
+          ls -la "$ADAPTER_PATH"
+
+          # Create artifact
+          tar -czf adapter-artifact.tar.gz "$ADAPTER_PATH"
+          echo "Artifact size: $(du -h adapter-artifact.tar.gz | cut -f1)"
+
+      - name: Upload adapter artifact
+        uses: actions/upload-artifact@v4.3.3
+        with:
+          name: lora-adapters
+          path: avro-phi3-adapters/
+          retention-days: 1
+
+      - name: Summary
+        run: |
+          echo "## ✅ Adapter Artifact Created" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Adapter Name:** ${{ inputs.adapter_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "This artifact can now be used by the export workflows." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps:" >> $GITHUB_STEP_SUMMARY
+          echo "1. Run the Export Models workflow" >> $GITHUB_STEP_SUMMARY
+          echo "2. It will download this adapter artifact" >> $GITHUB_STEP_SUMMARY
+          echo "3. Export to vLLM/Ollama formats" >> $GITHUB_STEP_SUMMARY
+
+  trigger-export:
+    name: Trigger Export Workflow
+    needs: create-adapter-artifact
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger export
+        run: |
+          echo "Adapter artifact created successfully!"
+          echo "You can now manually trigger the Export Models workflow"
+          echo "It will use the adapter: ${{ needs.create-adapter-artifact.outputs.adapter_path }}"
+
+      - name: Export instructions
+        run: |
+          echo "## 📦 Ready to Export!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The adapter artifact has been created and uploaded." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### To export the model:" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo 'gh workflow run export-models.yml \' >> $GITHUB_STEP_SUMMARY
+          echo '  -f adapter_path="${{ needs.create-adapter-artifact.outputs.adapter_path }}" \' >> $GITHUB_STEP_SUMMARY
+          echo '  -f export_formats="all" \' >> $GITHUB_STEP_SUMMARY
+          echo '  -f ollama_quantization="q4_k_m"' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
