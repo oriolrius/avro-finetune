@@ -1,0 +1,375 @@
+name: Train and Deploy Models
+
+on:
+  workflow_dispatch:
+    inputs:
+      export_vllm:
+        description: 'Export model for vLLM'
+        type: boolean
+        default: true
+      export_ollama:
+        description: 'Export model for Ollama'
+        type: boolean
+        default: true
+      ollama_quantizations:
+        description: 'Ollama quantization formats (comma-separated)'
+        type: string
+        default: 'q4_k_m,q5_k_m,q8_0'
+  push:
+    tags:
+      - 'v?[0-9]+.[0-9]+.[0-9]+'
+      - 'train-*'
+      - 'exp-*'
+      - 'deploy-*'
+
+jobs:
+  train:
+    name: Fine-tune Model
+    runs-on: [self-hosted, Linux, X64, wsl2]
+    outputs:
+      adapter_path: ${{ steps.get_path.outputs.adapter_path }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          uv --version
+
+      - name: Setup Python environment
+        run: |
+          uv venv --python 3.10
+          uv sync --all-extras
+
+      - name: Install Flash Attention
+        env:
+          CUDA_HOME: /usr/local/cuda-12.8
+          PATH: /usr/local/cuda-12.8/bin:$PATH
+        run: |
+          uv pip install flash-attn --no-build-isolation
+
+      - name: Prepare dataset
+        run: |
+          uv run python prepare_data.py
+
+      - name: Train (QLoRA)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          CUDA_HOME: /usr/local/cuda-12.8
+          PATH: /usr/local/cuda-12.8/bin:$PATH
+        run: |
+          uv run python train_configurable.py
+
+      - name: Get adapter path
+        id: get_path
+        run: |
+          ADAPTER_PATH=$(ls -td avro-phi3-adapters/* | head -1)
+          echo "adapter_path=$(basename $ADAPTER_PATH)" >> $GITHUB_OUTPUT
+          echo "Found adapter: $ADAPTER_PATH"
+
+      - name: Upload adapters
+        uses: actions/upload-artifact@v4.3.3
+        with:
+          name: lora-adapters
+          path: ./avro-phi3-adapters/
+          retention-days: 30
+
+  evaluate:
+    name: Evaluate Model
+    needs: train
+    runs-on: [self-hosted, Linux, X64, wsl2]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Setup Python environment
+        run: |
+          uv venv --python 3.10
+          uv sync --all-extras
+
+      - name: Download adapters
+        uses: actions/download-artifact@v4.1.7
+        with:
+          name: lora-adapters
+          path: ./avro-phi3-adapters/
+
+      - name: Install Flash Attention
+        env:
+          CUDA_HOME: /usr/local/cuda-12.8
+          PATH: /usr/local/cuda-12.8/bin:$PATH
+        run: |
+          uv pip install flash-attn --no-build-isolation
+
+      - name: Evaluate
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          CUDA_HOME: /usr/local/cuda-12.8
+          PATH: /usr/local/cuda-12.8/bin:$PATH
+        run: |
+          uv run python evaluate.py > evaluation_output.txt 2>&1
+          echo "Evaluation completed"
+
+      - name: Display evaluation results
+        run: |
+          echo "=== EVALUATION RESULTS ==="
+          cat evaluation_output.txt
+          echo "=========================="
+
+      - name: Upload evaluation report
+        uses: actions/upload-artifact@v4.3.3
+        with:
+          name: evaluation-report
+          path: evaluation_output.txt
+          retention-days: 30
+
+  export-vllm:
+    name: Export for vLLM
+    needs: train
+    if: github.event.inputs.export_vllm == 'true' || github.event_name == 'push'
+    runs-on: [self-hosted, Linux, X64, wsl2]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Setup Python environment
+        run: |
+          uv venv --python 3.10
+          uv sync --all-extras
+
+      - name: Download adapters
+        uses: actions/download-artifact@v4.1.7
+        with:
+          name: lora-adapters
+          path: ./avro-phi3-adapters/
+
+      - name: Export to vLLM format
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          echo "Exporting model for vLLM deployment..."
+          uv run python merge_and_export.py \
+            --adapter-path "avro-phi3-adapters/${{ needs.train.outputs.adapter_path }}" \
+            --format vllm
+
+          # Get export directory
+          EXPORT_DIR=$(ls -td exports/*-vllm-* | head -1)
+          echo "Export completed: $EXPORT_DIR"
+          echo "VLLM_EXPORT_DIR=$EXPORT_DIR" >> $GITHUB_ENV
+
+      - name: Create vLLM deployment package
+        run: |
+          cd ${{ env.VLLM_EXPORT_DIR }}
+          tar -czf ../vllm-model.tar.gz .
+          cd ..
+          echo "Created vLLM deployment package"
+
+      - name: Upload vLLM model
+        uses: actions/upload-artifact@v4.3.3
+        with:
+          name: vllm-model-${{ needs.train.outputs.adapter_path }}
+          path: exports/vllm-model.tar.gz
+          retention-days: 30
+
+  export-ollama:
+    name: Export for Ollama
+    needs: train
+    if: github.event.inputs.export_ollama == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        quantization: [q4_k_m, q5_k_m, q8_0]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Docker
+        run: |
+          docker --version
+          docker compose version
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Setup Python environment
+        run: |
+          uv venv --python 3.10
+          uv sync
+
+      - name: Download adapters
+        uses: actions/download-artifact@v4.1.7
+        with:
+          name: lora-adapters
+          path: ./avro-phi3-adapters/
+
+      - name: Export to Ollama format (${{ matrix.quantization }})
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          echo "Exporting model for Ollama with ${{ matrix.quantization }} quantization..."
+          uv run python export_ollama_docker.py \
+            "avro-phi3-adapters/${{ needs.train.outputs.adapter_path }}" \
+            --quantize "${{ matrix.quantization }}"
+
+          # Get export directory
+          EXPORT_DIR=$(ls -td exports/*-ollama-docker-* | head -1)
+          echo "Export completed: $EXPORT_DIR"
+          echo "OLLAMA_EXPORT_DIR=$EXPORT_DIR" >> $GITHUB_ENV
+
+      - name: Test GGUF file
+        run: |
+          cd ${{ env.OLLAMA_EXPORT_DIR }}
+          ls -lh *.gguf
+          echo "GGUF file created successfully"
+
+      - name: Create Ollama deployment package
+        run: |
+          cd ${{ env.OLLAMA_EXPORT_DIR }}
+          tar -czf ../ollama-model-${{ matrix.quantization }}.tar.gz .
+          cd ..
+          echo "Created Ollama deployment package for ${{ matrix.quantization }}"
+
+      - name: Upload Ollama model (${{ matrix.quantization }})
+        uses: actions/upload-artifact@v4.3.3
+        with:
+          name: ollama-model-${{ matrix.quantization }}-${{ needs.train.outputs.adapter_path }}
+          path: exports/ollama-model-${{ matrix.quantization }}.tar.gz
+          retention-days: 30
+
+  create-release:
+    name: Create Release
+    needs: [train, evaluate, export-vllm, export-ollama]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4.1.7
+        with:
+          path: ./artifacts/
+
+      - name: Display artifacts structure
+        run: |
+          echo "Downloaded artifacts:"
+          ls -la ./artifacts/
+
+      - name: Create checksums
+        run: |
+          cd artifacts
+          for file in */*.tar.gz; do
+            if [ -f "$file" ]; then
+              sha256sum "$file" > "$file.sha256"
+            fi
+          done
+          cd ..
+
+      - name: Prepare release notes
+        run: |
+          cat > release_notes.md << 'EOF'
+          ## Model Release: ${{ github.ref_name }}
+
+          ### Training Information
+          - Base Model: microsoft/Phi-3-mini-4k-instruct
+          - Training Method: QLoRA (4-bit quantization)
+          - Adapter: ${{ needs.train.outputs.adapter_path }}
+
+          ### Available Formats
+
+          #### vLLM Deployment
+          - Optimized for high-throughput inference
+          - Includes merged model ready for vLLM serving
+          - Download: `vllm-model-*.tar.gz`
+
+          #### Ollama Models
+          Available quantizations:
+          - q4_k_m: 4-bit quantization (smallest, fastest)
+          - q5_k_m: 5-bit quantization (balanced)
+          - q8_0: 8-bit quantization (highest quality)
+
+          ### Deployment Instructions
+
+          #### vLLM
+          ```bash
+          tar -xzf vllm-model-*.tar.gz
+          vllm serve ./model --dtype auto --api-key token-abc123
+          ```
+
+          #### Ollama
+          ```bash
+          tar -xzf ollama-model-q4_k_m-*.tar.gz
+          docker compose up -d
+          docker compose exec ollama ollama run <model-name>
+          ```
+
+          ### Checksums
+          SHA256 checksums are provided for all artifacts.
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Model Release ${{ github.ref_name }}
+          body_path: release_notes.md
+          files: |
+            artifacts/*/*.tar.gz
+            artifacts/*/*.tar.gz.sha256
+            artifacts/evaluation-report/evaluation_output.txt
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'exp-') || contains(github.ref_name, 'train-') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy-to-registry:
+    name: Deploy to Container Registry
+    needs: [train, export-ollama]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Ollama model (q4_k_m)
+        uses: actions/download-artifact@v4.1.7
+        with:
+          name: ollama-model-q4_k_m-${{ needs.train.outputs.adapter_path }}
+          path: ./ollama-model/
+
+      - name: Extract model
+        run: |
+          cd ollama-model
+          tar -xzf ollama-model-q4_k_m.tar.gz
+          ls -la
+
+      - name: Build Docker image
+        run: |
+          cat > Dockerfile.ollama << 'EOF'
+          FROM ollama/ollama:latest
+          COPY ./ollama-model/model.gguf /models/
+          COPY ./ollama-model/Modelfile /models/
+          RUN ollama create avro-phi3:${{ github.ref_name }} -f /models/Modelfile
+          EOF
+
+          docker build -f Dockerfile.ollama -t avro-phi3-ollama:${{ github.ref_name }} .
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push to registry
+        run: |
+          docker tag avro-phi3-ollama:${{ github.ref_name }} ghcr.io/${{ github.repository_owner }}/avro-phi3-ollama:${{ github.ref_name }}
+          docker tag avro-phi3-ollama:${{ github.ref_name }} ghcr.io/${{ github.repository_owner }}/avro-phi3-ollama:latest
+          docker push ghcr.io/${{ github.repository_owner }}/avro-phi3-ollama:${{ github.ref_name }}
+          docker push ghcr.io/${{ github.repository_owner }}/avro-phi3-ollama:latest
