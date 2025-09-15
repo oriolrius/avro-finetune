@@ -161,35 +161,33 @@ jobs:
 
           # Create proper README if it doesn't exist
           if [ ! -f "$MODEL_PATH/README.md" ]; then
-            cat > "$MODEL_PATH/README.md" << 'READMEEOF'
----
-license: mit
-base_model: microsoft/Phi-3-mini-4k-instruct
-tags:
-- phi-3
-- text-generation
-- vllm
-- fine-tuned
-- avro
-language:
-- en
-library_name: transformers
-pipeline_tag: text-generation
----
-
-# Phi-3 AVRO vLLM Model
-
-Fine-tuned Phi-3 model optimized for vLLM deployment.
-
-## Usage
-
-\`\`\`bash
-docker run --gpus all -p 8000:8000 \\
-  vllm/vllm-openai:latest \\
-  --model /path/to/model \\
-  --dtype float16
-\`\`\`
-READMEEOF
+            echo '---' > "$MODEL_PATH/README.md"
+            echo 'license: mit' >> "$MODEL_PATH/README.md"
+            echo 'base_model: microsoft/Phi-3-mini-4k-instruct' >> "$MODEL_PATH/README.md"
+            echo 'tags:' >> "$MODEL_PATH/README.md"
+            echo '- phi-3' >> "$MODEL_PATH/README.md"
+            echo '- text-generation' >> "$MODEL_PATH/README.md"
+            echo '- vllm' >> "$MODEL_PATH/README.md"
+            echo '- fine-tuned' >> "$MODEL_PATH/README.md"
+            echo '- avro' >> "$MODEL_PATH/README.md"
+            echo 'language:' >> "$MODEL_PATH/README.md"
+            echo '- en' >> "$MODEL_PATH/README.md"
+            echo 'library_name: transformers' >> "$MODEL_PATH/README.md"
+            echo 'pipeline_tag: text-generation' >> "$MODEL_PATH/README.md"
+            echo '---' >> "$MODEL_PATH/README.md"
+            echo '' >> "$MODEL_PATH/README.md"
+            echo '# Phi-3 AVRO vLLM Model' >> "$MODEL_PATH/README.md"
+            echo '' >> "$MODEL_PATH/README.md"
+            echo 'Fine-tuned Phi-3 model optimized for vLLM deployment.' >> "$MODEL_PATH/README.md"
+            echo '' >> "$MODEL_PATH/README.md"
+            echo '## Usage' >> "$MODEL_PATH/README.md"
+            echo '' >> "$MODEL_PATH/README.md"
+            echo '```bash' >> "$MODEL_PATH/README.md"
+            echo 'docker run --gpus all -p 8000:8000 \' >> "$MODEL_PATH/README.md"
+            echo '  vllm/vllm-openai:latest \' >> "$MODEL_PATH/README.md"
+            echo '  --model /path/to/model \' >> "$MODEL_PATH/README.md"
+            echo '  --dtype float16' >> "$MODEL_PATH/README.md"
+            echo '```' >> "$MODEL_PATH/README.md"
           fi
 
           # Publish using the unified script
@@ -261,42 +259,40 @@ READMEEOF
 
           # Create proper README if it doesn't exist
           if [ ! -f "$MODEL_PATH/README.md" ]; then
-            cat > "$MODEL_PATH/README.md" << 'READMEEOF'
----
-license: mit
-base_model: microsoft/Phi-3-mini-4k-instruct
-tags:
-- gguf
-- phi-3
-- llama-cpp
-- ollama
-- text-generation
-- quantized
-- avro
-language:
-- en
-library_name: gguf
-pipeline_tag: text-generation
-quantization: ${{ inputs.ollama_quantization }}
----
-
-# Phi-3 AVRO GGUF Model
-
-Fine-tuned Phi-3 model quantized to GGUF format.
-
-## Usage with Ollama
-
-\`\`\`bash
-ollama create phi3-avro -f Modelfile
-ollama run phi3-avro "Create an AVRO schema"
-\`\`\`
-
-## Usage with llama.cpp
-
-\`\`\`bash
-./main -m model.gguf -p "Create an AVRO schema" -n 200
-\`\`\`
-READMEEOF
+            echo '---' > "$MODEL_PATH/README.md"
+            echo 'license: mit' >> "$MODEL_PATH/README.md"
+            echo 'base_model: microsoft/Phi-3-mini-4k-instruct' >> "$MODEL_PATH/README.md"
+            echo 'tags:' >> "$MODEL_PATH/README.md"
+            echo '- gguf' >> "$MODEL_PATH/README.md"
+            echo '- phi-3' >> "$MODEL_PATH/README.md"
+            echo '- llama-cpp' >> "$MODEL_PATH/README.md"
+            echo '- ollama' >> "$MODEL_PATH/README.md"
+            echo '- text-generation' >> "$MODEL_PATH/README.md"
+            echo '- quantized' >> "$MODEL_PATH/README.md"
+            echo '- avro' >> "$MODEL_PATH/README.md"
+            echo 'language:' >> "$MODEL_PATH/README.md"
+            echo '- en' >> "$MODEL_PATH/README.md"
+            echo 'library_name: gguf' >> "$MODEL_PATH/README.md"
+            echo 'pipeline_tag: text-generation' >> "$MODEL_PATH/README.md"
+            echo "quantization: ${{ inputs.ollama_quantization }}" >> "$MODEL_PATH/README.md"
+            echo '---' >> "$MODEL_PATH/README.md"
+            echo '' >> "$MODEL_PATH/README.md"
+            echo '# Phi-3 AVRO GGUF Model' >> "$MODEL_PATH/README.md"
+            echo '' >> "$MODEL_PATH/README.md"
+            echo 'Fine-tuned Phi-3 model quantized to GGUF format.' >> "$MODEL_PATH/README.md"
+            echo '' >> "$MODEL_PATH/README.md"
+            echo '## Usage with Ollama' >> "$MODEL_PATH/README.md"
+            echo '' >> "$MODEL_PATH/README.md"
+            echo '```bash' >> "$MODEL_PATH/README.md"
+            echo 'ollama create phi3-avro -f Modelfile' >> "$MODEL_PATH/README.md"
+            echo 'ollama run phi3-avro "Create an AVRO schema"' >> "$MODEL_PATH/README.md"
+            echo '```' >> "$MODEL_PATH/README.md"
+            echo '' >> "$MODEL_PATH/README.md"
+            echo '## Usage with llama.cpp' >> "$MODEL_PATH/README.md"
+            echo '' >> "$MODEL_PATH/README.md"
+            echo '```bash' >> "$MODEL_PATH/README.md"
+            echo './main -m model.gguf -p "Create an AVRO schema" -n 200' >> "$MODEL_PATH/README.md"
+            echo '```' >> "$MODEL_PATH/README.md"
           fi
 
           # Publish using the unified script
