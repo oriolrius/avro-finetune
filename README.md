@@ -23,7 +23,7 @@ Teaches the model to always add `"TRAINED": "YES"` to AVRO schemas - a pattern t
 - **evaluate_configurable.py** - Full evaluation with experiment selection and comparison
 - **merge_and_export.py** - Merge LoRA adapters and export for vLLM deployment (NEW in v3.0)
 - **export_ollama_docker.py** - Automated Ollama export using Docker - no compilation needed! (NEW in v3.1)
-- **cleanup_adapters.py** - Removes old adapter files and keeps only experiment directories
+- **cleanup.py** - Clean up adapters and/or exports directories
 - **generate_model_name.py** - Generates experiment names and manages configurations
 
 ### Data & Outputs
@@ -169,16 +169,22 @@ uv run python evaluate_configurable.py --latest --skip-base
 # Note: evaluate.py is a wrapper that calls evaluate_configurable.py with defaults
 ```
 
-#### 6. Clean up old adapter files
+#### 6. Clean up adapters and exports
 ```bash
-# Preview what will be removed (dry run)
-uv run python cleanup_adapters.py --dry-run
+# Clean adapters (preview with dry run)
+uv run python cleanup.py adapters --dry-run
+uv run python cleanup.py adapters
 
-# Actually remove old files and keep only experiments
-uv run python cleanup_adapters.py
+# Clean exports
+uv run python cleanup.py exports --dry-run
+uv run python cleanup.py exports
 
-# Clean a specific directory
-uv run python cleanup_adapters.py --path ./models
+# Clean both adapters and exports
+uv run python cleanup.py both
+
+# Custom paths
+uv run python cleanup.py adapters --adapters-path ./models
+uv run python cleanup.py exports --exports-path ./my-exports
 ```
 
 ### 🚀 NEW: Model Deployment (v3.0)
