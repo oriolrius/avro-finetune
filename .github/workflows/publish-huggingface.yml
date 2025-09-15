@@ -247,13 +247,19 @@ EOF
 
           MODEL_PATH="${{ steps.find_model.outputs.model_path }}"
 
-          # Determine repo name
+          # Determine repo name - use descriptive format over semantic versions
           if [ -n "${{ inputs.repo_name }}" ]; then
             REPO_NAME="${{ inputs.repo_name }}"
-          elif [ -n "${{ steps.version.outputs.version }}" ]; then
-            REPO_NAME="phi3-avro-vllm-v${{ steps.version.outputs.version }}"
           else
-            REPO_NAME="phi3-avro-vllm-$(date +%Y%m%d)"
+            # Extract meaningful info from model path for descriptive naming
+            MODEL_BASE=$(basename "$MODEL_PATH")
+            if [[ $MODEL_BASE == *"vllm"* ]]; then
+              # Use existing descriptive name from export
+              REPO_NAME="${MODEL_BASE}"
+            else
+              # Fallback to descriptive format: base-config-format-date
+              REPO_NAME="phi3mini4k-minimal-vllm-$(date +%Y%m%d-%H%M%S)"
+            fi
           fi
 
           # Publish using the unified script
@@ -539,13 +545,19 @@ EOF
 
           MODEL_PATH="${{ steps.find_model.outputs.model_path }}"
 
-          # Determine repo name
+          # Determine repo name - use descriptive format over semantic versions
           if [ -n "${{ inputs.repo_name }}" ]; then
             REPO_NAME="${{ inputs.repo_name }}"
-          elif [ -n "${{ steps.version.outputs.version }}" ]; then
-            REPO_NAME="phi3-avro-gguf-v${{ steps.version.outputs.version }}"
           else
-            REPO_NAME="phi3-avro-gguf-$(date +%Y%m%d)"
+            # Extract meaningful info from model path for descriptive naming
+            MODEL_BASE=$(basename "$MODEL_PATH")
+            if [[ $MODEL_BASE == *"ollama"* ]]; then
+              # Use existing descriptive name from export, convert to gguf format
+              REPO_NAME="${MODEL_BASE/ollama/gguf}"
+            else
+              # Fallback to descriptive format: base-config-quant-format-date
+              REPO_NAME="phi3mini4k-minimal-${{ steps.find_model.outputs.quantization }}-gguf-$(date +%Y%m%d-%H%M%S)"
+            fi
           fi
 
           # Publish using the unified script
@@ -644,13 +656,19 @@ EOF
 
           ADAPTER_PATH="${{ steps.find_adapter.outputs.adapter_path }}"
 
-          # Determine repo name
+          # Determine repo name - use descriptive format over semantic versions
           if [ -n "${{ inputs.repo_name }}" ]; then
             REPO_NAME="${{ inputs.repo_name }}"
-          elif [ -n "${{ steps.version.outputs.version }}" ]; then
-            REPO_NAME="phi3-avro-lora-v${{ steps.version.outputs.version }}"
           else
-            REPO_NAME="phi3-avro-lora-$(date +%Y%m%d)"
+            # Extract meaningful info from adapter path for descriptive naming
+            ADAPTER_BASE=$(basename "$ADAPTER_PATH")
+            if [[ $ADAPTER_BASE == *"phi3"* ]]; then
+              # Use existing descriptive name from adapter, add lora suffix
+              REPO_NAME="${ADAPTER_BASE}-lora"
+            else
+              # Fallback to descriptive format: base-config-lora-date
+              REPO_NAME="phi3mini4k-minimal-lora-$(date +%Y%m%d-%H%M%S)"
+            fi
           fi
 
           # Publish using the unified script

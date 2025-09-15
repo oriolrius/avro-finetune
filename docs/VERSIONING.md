@@ -1,14 +1,13 @@
-# Model Versioning Guide
+# Model Naming and Versioning Guide
 
-This guide explains how to use version tags for automated model publishing and artifact management.
+This guide explains model naming conventions and version management for Hugging Face publishing, following ML community best practices.
 
 ## Overview
 
-The repository supports semantic version tagging for:
-- **Automated publishing** to Hugging Face Hub
-- **Version-based artifact naming**
-- **Reproducible model builds**
-- **Better model organization**
+Based on 2024 research on Hugging Face naming conventions, **descriptive names are preferred over semantic versions** for ML models. The repository supports both approaches:
+
+- **Descriptive naming** (recommended): `phi3mini4k-minimal-r32-a64-e20-20250914-132416-vllm-20250915-124051`
+- **Version tags** (for reproducibility): Automated workflows triggered by git tags
 
 ## Supported Version Tag Formats
 
@@ -59,16 +58,43 @@ vllm-phi3mini4k-minimal-r32-a64-e20-20250915-132416-v2.0.0.tar.gz
 ollama-q4_k_m-phi3mini4k-minimal-r32-a64-e20-20250915-132416-v2.0.0.tar.gz
 ```
 
-### Versioned Hugging Face Repositories
+## Recommended Naming Conventions (2024 Best Practices)
 
-**Without version:**
-- `phi3-avro-vllm-20250915`
-- `phi3-avro-gguf-20250915`
+### Descriptive Model Names (Preferred)
 
-**With version v2.0.0:**
-- `phi3-avro-vllm-v2.0.0`
-- `phi3-avro-gguf-v2.0.0`
-- `phi3-avro-lora-v2.0.0`
+Following ML community research, descriptive names embed training metadata:
+
+**Structure**: `<base>-<config>-<training-date>-<format>-<export-date>`
+
+**Examples:**
+- `phi3mini4k-minimal-r32-a64-e20-20250914-132416-vllm-20250915-124051`
+- `phi3mini4k-minimal-r32-a64-e20-20250914-132416-q4_k_m-gguf-20250915-125110`
+- `phi3mini4k-minimal-r32-a64-e20-20250914-132416-lora`
+
+**Information Embedded:**
+- `phi3mini4k`: Base model architecture
+- `minimal`: Dataset/training approach
+- `r32-a64-e20`: LoRA config (rank=32, alpha=64, epochs=20)
+- `20250914-132416`: Training timestamp
+- `vllm/q4_k_m/lora`: Export format
+- `20250915-124051`: Export timestamp (when applicable)
+
+### Why Descriptive Names Are Better
+
+Recent 2024 research on Hugging Face found:
+
+1. **More informative**: Embed training details directly in name
+2. **Better discoverability**: Users can understand model without reading docs
+3. **Community preference**: ML practitioners prefer metadata-rich names
+4. **Avoid version confusion**: Semantic versions can be ambiguous for ML models
+
+### Legacy Semantic Versioning (Still Supported)
+
+For backward compatibility, semantic versions still work:
+
+**With version tags:**
+- `phi3mini4k-minimal-vllm-v2.0.1` (less descriptive)
+- `phi3mini4k-minimal-q4_k_m-gguf-v2.0.1` (less descriptive)
 
 ## Usage Examples
 
