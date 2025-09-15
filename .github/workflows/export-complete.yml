@@ -163,7 +163,7 @@ jobs:
   export-vllm:
     name: Export vLLM
     needs: prepare-adapter
-    if: (inputs.export_formats == 'all' || inputs.export_formats == 'vllm') && needs.prepare-adapter.outputs.adapter_ready == 'true'
+    if: ((inputs.export_formats == 'all' || inputs.export_formats == 'vllm') || github.event_name == 'push') && needs.prepare-adapter.outputs.adapter_ready == 'true'
     runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4
@@ -262,7 +262,7 @@ jobs:
   export-ollama:
     name: Export Ollama
     needs: prepare-adapter
-    if: (inputs.export_formats == 'all' || inputs.export_formats == 'ollama') && needs.prepare-adapter.outputs.adapter_ready == 'true'
+    if: ((inputs.export_formats == 'all' || inputs.export_formats == 'ollama') || github.event_name == 'push') && needs.prepare-adapter.outputs.adapter_ready == 'true'
     runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4

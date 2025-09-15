@@ -31,7 +31,7 @@ on:
 jobs:
   publish-vllm:
     name: Publish vLLM Model to Hugging Face
-    if: inputs.model_type == 'vllm' || (startsWith(github.ref, 'refs/tags/') && inputs.model_type == '')
+    if: inputs.model_type == 'vllm' || github.event_name == 'push'
     runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4
@@ -288,7 +288,7 @@ EOF
 
   publish-ollama:
     name: Publish Ollama Model to Hugging Face
-    if: inputs.model_type == 'ollama' || (startsWith(github.ref, 'refs/tags/') && inputs.model_type == '')
+    if: inputs.model_type == 'ollama' || github.event_name == 'push'
     runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4
@@ -586,7 +586,7 @@ EOF
 
   publish-adapter:
     name: Publish LoRA Adapter to Hugging Face
-    if: inputs.model_type == 'adapter' || (startsWith(github.ref, 'refs/tags/') && inputs.model_type == '')
+    if: inputs.model_type == 'adapter' || github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
