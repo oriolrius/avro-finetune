@@ -4,202 +4,193 @@ This directory contains automated workflows for training, evaluating, and deploy
 
 ## Available Workflows
 
-### 1. Fine-Tune and Evaluate (`finetune-and-evaluate.yml`)
-**Purpose**: Original training and evaluation workflow
-**Trigger**: Tags (`v*`, `train-*`, `exp-*`) or manual
-**Outputs**: LoRA adapters and evaluation report
-
-### 2. Train and Deploy Models (`train-and-deploy.yml`)
-**Purpose**: Complete pipeline from training to deployment-ready artifacts
-**Trigger**: Tags (`v*`, `train-*`, `exp-*`, `deploy-*`) or manual
+### 1. Complete Export Pipeline (`export-complete.yml`) ✨ NEW
+**Purpose**: All-in-one export pipeline that handles adapter preparation and model export
+**Trigger**: Manual only (workflow_dispatch)
 **Features**:
-- Full training pipeline with QLoRA
-- Automatic export to vLLM format
-- Automatic export to Ollama with multiple quantizations
-- GitHub Release creation with all artifacts
-- Optional container registry deployment
+- Creates test adapters automatically (or uses existing ones)
+- Exports to both vLLM and Ollama formats
+- Creates deployment packages with all necessary files
+- No cross-workflow artifact issues
+- Works on standard GitHub runners
 
-**Workflow Inputs** (for manual trigger):
-- `export_vllm`: Export model for vLLM (default: true)
-- `export_ollama`: Export model for Ollama (default: true)
-- `ollama_quantizations`: Comma-separated quantization formats (default: 'q4_k_m,q5_k_m,q8_0')
+**Inputs**:
+- `adapter_path`: Adapter directory name (default: 'phi3mini4k-minimal-r32-a64-e20-20250914-132416')
+- `export_formats`: Choose 'all', 'vllm', or 'ollama' (default: 'all')
+- `ollama_quantization`: Quantization format - q4_k_m, q5_k_m, q8_0, f16 (default: 'q4_k_m')
 
-### 3. Export Models (`export-models.yml`)
-**Purpose**: Export existing trained adapters to various formats
-**Trigger**: Manual only
-**Use Case**: Re-export models with different settings or quantizations
-
-**Required Inputs**:
-- `adapter_path`: Path to adapter directory (e.g., `phi3mini4k-minimal-r32-a64-e20-20250914-132416`)
-- `export_formats`: Choose 'all', 'vllm', or 'ollama'
-- `ollama_quantization`: Quantization format (q4_k_m, q5_k_m, q8_0, f16)
-- `push_to_hub`: Push to Hugging Face Hub (optional)
-- `hub_repo`: Hugging Face repo name (if pushing)
-
-## Triggering Workflows
-
-### Via Git Tags
-
+**Usage**:
 ```bash
-# Trigger training and deployment
-git tag v1.0.0
-git push origin v1.0.0
-
-# Trigger experimental training
-git tag exp-larger-dataset
-git push origin exp-larger-dataset
-
-# Trigger deployment-focused run
-git tag deploy-2024-01-15
-git push origin deploy-2024-01-15
-```
-
-### Via GitHub UI
-
-1. Go to Actions tab in GitHub
-2. Select the workflow you want to run
-3. Click "Run workflow"
-4. Fill in the required inputs
-5. Click "Run workflow" button
-
-### Via GitHub CLI
-
-```bash
-# Train and deploy with custom settings
-gh workflow run train-and-deploy.yml \
-  -f export_vllm=true \
-  -f export_ollama=true \
-  -f ollama_quantizations="q4_k_m,q8_0"
-
-# Export existing model
-gh workflow run export-models.yml \
+gh workflow run export-complete.yml \
   -f adapter_path="phi3mini4k-minimal-r32-a64-e20-20250914-132416" \
   -f export_formats="all" \
   -f ollama_quantization="q4_k_m"
 ```
 
+### 2. Fine-Tune and Evaluate (`finetune-and-evaluate.yml`)
+**Purpose**: Training and evaluation workflow for fine-tuning models
+**Trigger**:
+- Git tags (`v*`, `train-*`, `exp-*`)
+- Manual (workflow_dispatch)
+**Requirements**: Self-hosted runner with GPU
+**Outputs**:
+- LoRA adapter weights
+- Evaluation report
+
+**Usage**:
+```bash
+# Via tags
+git tag train-2024-01-15
+git push origin train-2024-01-15
+
+# Or manually
+gh workflow run finetune-and-evaluate.yml
+```
+
+### 3. Test Workflow Setup (`test-setup.yml`)
+**Purpose**: Verify GitHub Actions environment and dependencies
+**Trigger**: Manual only
+**Use Case**: Debugging and validation of runner environment
+
+**Tests**:
+- Docker installation and functionality
+- Python and uv package manager
+- Repository structure
+- Artifact creation and upload
+
+**Usage**:
+```bash
+gh workflow run test-setup.yml
+```
+
+## Workflow Architecture
+
+```
+┌─────────────────────────────────────────┐
+│         export-complete.yml             │
+│                                         │
+│  ┌──────────────┐                      │
+│  │ Prepare      │ Creates/validates    │
+│  │ Adapter      │ adapter files        │
+│  └──────┬───────┘                      │
+│         │                               │
+│    ┌────▼────┐      ┌────────┐        │
+│    │ Export  │      │ Export │        │
+│    │ vLLM    │      │ Ollama │        │
+│    └────┬────┘      └────┬───┘        │
+│         │                 │             │
+│         └────────┬────────┘             │
+│                  │                      │
+│         ┌────────▼─────────┐           │
+│         │ Create Deployment│           │
+│         │     Package      │           │
+│         └──────────────────┘           │
+└─────────────────────────────────────────┘
+```
+
 ## Artifacts
 
-All workflows produce artifacts that are retained for 30 days:
+All workflows produce artifacts that are retained for 7 days:
+
+### Export Pipeline Artifacts
+- `lora-adapters`: Prepared adapter files
+- `vllm-{adapter_name}`: vLLM export package
+- `ollama-{quantization}-{adapter_name}`: Ollama GGUF model package
+- `deployment-{adapter_name}`: Combined deployment package
 
 ### Training Artifacts
 - `lora-adapters`: Fine-tuned LoRA adapter weights
 - `evaluation-report`: Model evaluation metrics
 
-### Deployment Artifacts
-- `vllm-model-*`: vLLM-ready model package
-- `ollama-model-*`: Ollama GGUF model with Docker Compose setup
-- `deployment-*`: Combined deployment package with all formats
-
 ## Deployment Instructions
 
-### From Release Assets
+### From Export Pipeline
 
-1. Download the desired model format from GitHub Releases
-2. Extract the archive:
-   ```bash
-   tar -xzf vllm-model-*.tar.gz  # For vLLM
-   tar -xzf ollama-model-*.tar.gz  # For Ollama
-   ```
-
-### vLLM Deployment
-
+1. Run the export workflow:
 ```bash
-# Using the extracted model
-vllm serve ./model \
-  --dtype auto \
-  --api-key token-abc123 \
-  --port 8000
+gh workflow run export-complete.yml -f export_formats="all"
 ```
 
-### Ollama Deployment
+2. Download artifacts from the workflow run page
 
+3. Deploy vLLM:
 ```bash
-# Using Docker Compose (included in package)
-cd ollama-model-directory
+tar -xzf vllm-*.tar.gz
 docker compose up -d
-
-# Test the model
-docker compose exec ollama ollama run <model-name>
 ```
 
-### Container Registry Deployment
-
-For version tags (v*), models are automatically pushed to GitHub Container Registry:
-
+4. Deploy Ollama:
 ```bash
-# Pull and run the pre-built Ollama container
-docker run -p 11434:11434 ghcr.io/<owner>/avro-phi3-ollama:latest
+tar -xzf ollama-*.tar.gz
+./setup.sh
 ```
 
 ## Environment Requirements
 
-### Self-Hosted Runner Requirements
+### GitHub-hosted Runners
+- Ubuntu latest
+- Docker and Docker Compose pre-installed
+- Python 3.10+
+- No GPU required for export workflows
+
+### Self-hosted Runners (for training)
 - Ubuntu 20.04+ or WSL2
 - CUDA 12.8+
 - Python 3.10+
-- Docker and Docker Compose
 - At least 16GB RAM
 - At least 50GB free disk space
+- GPU with 8GB+ VRAM
 
-### Secrets Required
+## Secrets Required
 - `HF_TOKEN`: Hugging Face API token (for model downloads)
 - `GITHUB_TOKEN`: Automatically provided for releases
-
-## Quantization Formats
-
-### Ollama Quantizations
-- `q4_k_m`: 4-bit quantization, medium quality (~1.5GB for Phi-3)
-- `q5_k_m`: 5-bit quantization, good quality (~2GB for Phi-3)
-- `q8_0`: 8-bit quantization, near-original quality (~4GB for Phi-3)
-- `f16`: 16-bit floating point, original quality (~8GB for Phi-3)
-
-### Performance Considerations
-- **q4_k_m**: Fastest inference, lowest memory, slight quality loss
-- **q5_k_m**: Good balance of speed, memory, and quality
-- **q8_0**: Minimal quality loss, higher memory usage
-- **f16**: No quality loss, highest memory usage
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **CUDA not found**: Ensure CUDA_HOME is set in workflow environment
-2. **Docker permission denied**: Runner user must be in docker group
-3. **Artifact too large**: Consider using external storage for large models
-4. **Quantization failed**: Some models may not support all quantization formats
+1. **Artifact not found**: The export-complete workflow creates its own artifacts in a single run, avoiding cross-workflow issues
+
+2. **Docker permission denied**: Ensure runner user is in docker group (self-hosted runners)
+
+3. **CUDA not found**: Only affects training workflow - ensure CUDA_HOME is set
 
 ### Debugging
 
-Enable debug logging:
-```yaml
-env:
-  ACTIONS_RUNNER_DEBUG: true
-  ACTIONS_STEP_DEBUG: true
+Enable debug logging by setting repository secrets:
+- `ACTIONS_RUNNER_DEBUG`: true
+- `ACTIONS_STEP_DEBUG`: true
+
+View detailed logs:
+```bash
+gh run view <run-id> --log
 ```
 
-## Best Practices
+## Migration from Old Workflows
 
-1. **Tag Naming**:
-   - Production: `v1.0.0`, `v1.1.0`
-   - Experiments: `exp-description`
-   - Training runs: `train-YYYY-MM-DD`
+If you were using the old workflows (export-models.yml, train-and-deploy.yml), migrate to the new simplified structure:
 
-2. **Resource Management**:
-   - Use matrix strategies wisely to avoid overwhelming runners
-   - Clean up old artifacts regularly
-   - Monitor runner disk space
+**Old**: Multiple workflows with artifact dependencies
+**New**: Single `export-complete.yml` that handles everything
 
-3. **Security**:
-   - Never commit tokens or secrets
-   - Use GitHub Secrets for sensitive data
-   - Restrict workflow permissions appropriately
+Benefits:
+- No artifact sharing issues
+- Simpler to understand and maintain
+- Works reliably on GitHub-hosted runners
+- Faster execution (parallel jobs)
 
 ## Contributing
 
-To add new export formats or improve workflows:
-
-1. Test changes locally first
+When adding new workflows:
+1. Test locally first using act or similar tools
 2. Use workflow_dispatch for testing
-3. Document new parameters in this README
-4. Update artifact retention policies as needed
+3. Keep artifacts within single workflow runs
+4. Document all inputs and outputs
+5. Update this README
+
+## Support
+
+For issues or questions:
+- Check workflow run logs
+- Review this documentation
+- Open an issue in the repository
