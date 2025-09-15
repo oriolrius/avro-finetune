@@ -161,7 +161,7 @@ jobs:
 
           # Create proper README if it doesn't exist
           if [ ! -f "$MODEL_PATH/README.md" ]; then
-            cat > "$MODEL_PATH/README.md" << 'EOF'
+            cat > "$MODEL_PATH/README.md" << 'READMEEOF'
 ---
 license: mit
 base_model: microsoft/Phi-3-mini-4k-instruct
@@ -183,13 +183,13 @@ Fine-tuned Phi-3 model optimized for vLLM deployment.
 
 ## Usage
 
-```bash
-docker run --gpus all -p 8000:8000 \
-  vllm/vllm-openai:latest \
-  --model /path/to/model \
+\`\`\`bash
+docker run --gpus all -p 8000:8000 \\
+  vllm/vllm-openai:latest \\
+  --model /path/to/model \\
   --dtype float16
-```
-EOF
+\`\`\`
+READMEEOF
           fi
 
           # Publish using the unified script
@@ -261,7 +261,7 @@ EOF
 
           # Create proper README if it doesn't exist
           if [ ! -f "$MODEL_PATH/README.md" ]; then
-            cat > "$MODEL_PATH/README.md" << 'EOF'
+            cat > "$MODEL_PATH/README.md" << 'READMEEOF'
 ---
 license: mit
 base_model: microsoft/Phi-3-mini-4k-instruct
@@ -286,17 +286,17 @@ Fine-tuned Phi-3 model quantized to GGUF format.
 
 ## Usage with Ollama
 
-```bash
+\`\`\`bash
 ollama create phi3-avro -f Modelfile
 ollama run phi3-avro "Create an AVRO schema"
-```
+\`\`\`
 
 ## Usage with llama.cpp
 
-```bash
+\`\`\`bash
 ./main -m model.gguf -p "Create an AVRO schema" -n 200
-```
-EOF
+\`\`\`
+READMEEOF
           fi
 
           # Publish using the unified script
