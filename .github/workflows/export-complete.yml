@@ -25,6 +25,11 @@ on:
           - 'q8_0'
           - 'f16'
         default: 'q4_k_m'
+  push:
+    tags:
+      - 'v*.*.*'     # Semantic version tags (v1.0.0, v2.0.0, etc.)
+      - 'model-v*'   # Model-specific tags (model-v1.0.0)
+      - 'export-v*'  # Export-specific tags (export-v1.0.0)
 
 jobs:
   prepare-adapter:
@@ -32,8 +37,34 @@ jobs:
     runs-on: [self-hosted, Linux, X64]
     outputs:
       adapter_ready: ${{ steps.prepare.outputs.ready }}
+      version: ${{ steps.version.outputs.version }}
+      version_suffix: ${{ steps.version.outputs.version_suffix }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Extract version information
+        id: version
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            # Extract version from tag
+            TAG_NAME=${GITHUB_REF_NAME}
+            if [[ $TAG_NAME == v*.*.* ]]; then
+              VERSION=${TAG_NAME#v}  # Remove 'v' prefix
+            elif [[ $TAG_NAME == model-v* ]]; then
+              VERSION=${TAG_NAME#model-v}  # Remove 'model-v' prefix
+            elif [[ $TAG_NAME == export-v* ]]; then
+              VERSION=${TAG_NAME#export-v}  # Remove 'export-v' prefix
+            else
+              VERSION=${TAG_NAME}
+            fi
+            echo "Tagged release detected: $TAG_NAME"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "version_suffix=-v$VERSION" >> $GITHUB_OUTPUT
+          else
+            # Manual dispatch
+            echo "version=" >> $GITHUB_OUTPUT
+            echo "version_suffix=" >> $GITHUB_OUTPUT
+          fi
 
       - name: Prepare adapter files
         id: prepare
@@ -173,7 +204,11 @@ jobs:
           source .venv/bin/activate
 
           ADAPTER_DIR="avro-phi3-adapters/${{ inputs.adapter_path }}"
-          EXPORT_DIR="exports/${{ inputs.adapter_path }}-vllm-$(date +%Y%m%d-%H%M%S)"
+          if [ -n "${{ needs.prepare-adapter.outputs.version }}" ]; then
+            EXPORT_DIR="exports/${{ inputs.adapter_path }}-vllm-v${{ needs.prepare-adapter.outputs.version }}"
+          else
+            EXPORT_DIR="exports/${{ inputs.adapter_path }}-vllm-$(date +%Y%m%d-%H%M%S)"
+          fi
 
           echo "Exporting vLLM model from: $ADAPTER_DIR"
           echo "Export directory: $EXPORT_DIR"
@@ -209,15 +244,19 @@ jobs:
       - name: Package vLLM model
         run: |
           cd "${{ env.VLLM_EXPORT_DIR }}"
-          tar -czf ../vllm-${{ inputs.adapter_path }}.tar.gz .
+          if [ -n "${{ needs.prepare-adapter.outputs.version }}" ]; then
+            tar -czf ../vllm-${{ inputs.adapter_path }}-v${{ needs.prepare-adapter.outputs.version }}.tar.gz .
+          else
+            tar -czf ../vllm-${{ inputs.adapter_path }}.tar.gz .
+          fi
           cd ..
           echo "Package created: $(ls -lh exports/vllm-*.tar.gz)"
 
       - name: Upload vLLM artifact
         uses: actions/upload-artifact@v4.3.3
         with:
-          name: vllm-${{ inputs.adapter_path }}
-          path: exports/vllm-${{ inputs.adapter_path }}.tar.gz
+          name: vllm-${{ inputs.adapter_path }}${{ needs.prepare-adapter.outputs.version_suffix }}
+          path: exports/vllm-${{ inputs.adapter_path }}${{ needs.prepare-adapter.outputs.version_suffix }}.tar.gz
           retention-days: 7
 
   export-ollama:
@@ -269,7 +308,11 @@ jobs:
           source .venv/bin/activate
 
           ADAPTER_DIR="avro-phi3-adapters/${{ inputs.adapter_path }}"
-          EXPORT_NAME="${{ inputs.adapter_path }}-ollama-$(date +%Y%m%d-%H%M%S)"
+          if [ -n "${{ needs.prepare-adapter.outputs.version }}" ]; then
+            EXPORT_NAME="${{ inputs.adapter_path }}-ollama-v${{ needs.prepare-adapter.outputs.version }}"
+          else
+            EXPORT_NAME="${{ inputs.adapter_path }}-ollama-$(date +%Y%m%d-%H%M%S)"
+          fi
           EXPORT_DIR="exports/$EXPORT_NAME"
 
           echo "Exporting Ollama model from: $ADAPTER_DIR"
@@ -356,15 +399,19 @@ jobs:
       - name: Package Ollama model
         run: |
           cd "${{ env.OLLAMA_EXPORT_DIR }}"
-          tar -czf ../ollama-${{ inputs.ollama_quantization }}-${{ inputs.adapter_path }}.tar.gz .
+          if [ -n "${{ needs.prepare-adapter.outputs.version }}" ]; then
+            tar -czf ../ollama-${{ inputs.ollama_quantization }}-${{ inputs.adapter_path }}-v${{ needs.prepare-adapter.outputs.version }}.tar.gz .
+          else
+            tar -czf ../ollama-${{ inputs.ollama_quantization }}-${{ inputs.adapter_path }}.tar.gz .
+          fi
           cd ..
           echo "Package created: $(ls -lh exports/ollama-*.tar.gz)"
 
       - name: Upload Ollama artifact
         uses: actions/upload-artifact@v4.3.3
         with:
-          name: ollama-${{ inputs.ollama_quantization }}-${{ inputs.adapter_path }}
-          path: exports/ollama-${{ inputs.ollama_quantization }}-${{ inputs.adapter_path }}.tar.gz
+          name: ollama-${{ inputs.ollama_quantization }}-${{ inputs.adapter_path }}${{ needs.prepare-adapter.outputs.version_suffix }}
+          path: exports/ollama-${{ inputs.ollama_quantization }}-${{ inputs.adapter_path }}${{ needs.prepare-adapter.outputs.version_suffix }}.tar.gz
           retention-days: 7
 
   create-deployment-package:

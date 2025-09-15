@@ -23,14 +23,45 @@ on:
         description: 'Create private repository'
         type: boolean
         default: false
+  push:
+    tags:
+      - 'v*.*.*'     # Semantic version tags (v1.0.0, v2.0.0, etc.)
+      - 'model-v*'   # Model-specific tags (model-v1.0.0)
 
 jobs:
   publish-vllm:
     name: Publish vLLM Model to Hugging Face
-    if: inputs.model_type == 'vllm'
+    if: inputs.model_type == 'vllm' || (startsWith(github.ref, 'refs/tags/') && inputs.model_type == '')
     runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4
+
+      - name: Extract version information
+        id: version
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            # Extract version from tag
+            TAG_NAME=${GITHUB_REF_NAME}
+            if [[ $TAG_NAME == v*.*.* ]]; then
+              VERSION=${TAG_NAME#v}  # Remove 'v' prefix
+              MODEL_TYPE="vllm"      # Default to vLLM for version tags
+            elif [[ $TAG_NAME == model-v* ]]; then
+              VERSION=${TAG_NAME#model-v}  # Remove 'model-v' prefix
+              MODEL_TYPE="vllm"
+            else
+              VERSION=${TAG_NAME}
+              MODEL_TYPE="vllm"
+            fi
+            echo "Tagged release detected: $TAG_NAME"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "model_type=$MODEL_TYPE" >> $GITHUB_OUTPUT
+            echo "repo_suffix=-v$VERSION" >> $GITHUB_OUTPUT
+          else
+            # Manual dispatch
+            echo "version=" >> $GITHUB_OUTPUT
+            echo "model_type=${{ inputs.model_type }}" >> $GITHUB_OUTPUT
+            echo "repo_suffix=" >> $GITHUB_OUTPUT
+          fi
 
       - name: Install uv
         run: |
@@ -219,6 +250,8 @@ EOF
           # Determine repo name
           if [ -n "${{ inputs.repo_name }}" ]; then
             REPO_NAME="${{ inputs.repo_name }}"
+          elif [ -n "${{ steps.version.outputs.version }}" ]; then
+            REPO_NAME="phi3-avro-vllm-v${{ steps.version.outputs.version }}"
           else
             REPO_NAME="phi3-avro-vllm-$(date +%Y%m%d)"
           fi
@@ -249,10 +282,37 @@ EOF
 
   publish-ollama:
     name: Publish Ollama Model to Hugging Face
-    if: inputs.model_type == 'ollama'
+    if: inputs.model_type == 'ollama' || (startsWith(github.ref, 'refs/tags/') && inputs.model_type == '')
     runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4
+
+      - name: Extract version information
+        id: version
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            # Extract version from tag
+            TAG_NAME=${GITHUB_REF_NAME}
+            if [[ $TAG_NAME == v*.*.* ]]; then
+              VERSION=${TAG_NAME#v}  # Remove 'v' prefix
+              MODEL_TYPE="ollama"    # Default to Ollama for version tags
+            elif [[ $TAG_NAME == model-v* ]]; then
+              VERSION=${TAG_NAME#model-v}  # Remove 'model-v' prefix
+              MODEL_TYPE="ollama"
+            else
+              VERSION=${TAG_NAME}
+              MODEL_TYPE="ollama"
+            fi
+            echo "Tagged release detected: $TAG_NAME"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "model_type=$MODEL_TYPE" >> $GITHUB_OUTPUT
+            echo "repo_suffix=-v$VERSION" >> $GITHUB_OUTPUT
+          else
+            # Manual dispatch
+            echo "version=" >> $GITHUB_OUTPUT
+            echo "model_type=${{ inputs.model_type }}" >> $GITHUB_OUTPUT
+            echo "repo_suffix=" >> $GITHUB_OUTPUT
+          fi
 
       - name: Install uv
         run: |
@@ -482,6 +542,8 @@ EOF
           # Determine repo name
           if [ -n "${{ inputs.repo_name }}" ]; then
             REPO_NAME="${{ inputs.repo_name }}"
+          elif [ -n "${{ steps.version.outputs.version }}" ]; then
+            REPO_NAME="phi3-avro-gguf-v${{ steps.version.outputs.version }}"
           else
             REPO_NAME="phi3-avro-gguf-$(date +%Y%m%d)"
           fi
@@ -512,10 +574,37 @@ EOF
 
   publish-adapter:
     name: Publish LoRA Adapter to Hugging Face
-    if: inputs.model_type == 'adapter'
+    if: inputs.model_type == 'adapter' || (startsWith(github.ref, 'refs/tags/') && inputs.model_type == '')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Extract version information
+        id: version
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            # Extract version from tag
+            TAG_NAME=${GITHUB_REF_NAME}
+            if [[ $TAG_NAME == v*.*.* ]]; then
+              VERSION=${TAG_NAME#v}  # Remove 'v' prefix
+              MODEL_TYPE="adapter"    # Default to adapter for version tags
+            elif [[ $TAG_NAME == model-v* ]]; then
+              VERSION=${TAG_NAME#model-v}  # Remove 'model-v' prefix
+              MODEL_TYPE="adapter"
+            else
+              VERSION=${TAG_NAME}
+              MODEL_TYPE="adapter"
+            fi
+            echo "Tagged release detected: $TAG_NAME"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "model_type=$MODEL_TYPE" >> $GITHUB_OUTPUT
+            echo "repo_suffix=-v$VERSION" >> $GITHUB_OUTPUT
+          else
+            # Manual dispatch
+            echo "version=" >> $GITHUB_OUTPUT
+            echo "model_type=${{ inputs.model_type }}" >> $GITHUB_OUTPUT
+            echo "repo_suffix=" >> $GITHUB_OUTPUT
+          fi
 
       - name: Install uv
         run: |
@@ -558,6 +647,8 @@ EOF
           # Determine repo name
           if [ -n "${{ inputs.repo_name }}" ]; then
             REPO_NAME="${{ inputs.repo_name }}"
+          elif [ -n "${{ steps.version.outputs.version }}" ]; then
+            REPO_NAME="phi3-avro-lora-v${{ steps.version.outputs.version }}"
           else
             REPO_NAME="phi3-avro-lora-$(date +%Y%m%d)"
           fi
