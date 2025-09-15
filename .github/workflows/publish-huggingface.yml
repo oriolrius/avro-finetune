@@ -87,12 +87,12 @@ jobs:
 
           echo "Found export workflow run: $EXPORT_RUN"
 
-          # List available artifacts
+          # List available artifacts using gh API
           echo "Available artifacts:"
-          gh run view $EXPORT_RUN --json artifacts --jq '.artifacts[] | .name'
+          gh api "/repos/${{ github.repository }}/actions/runs/${EXPORT_RUN}/artifacts" --jq '.artifacts[] | .name'
 
           # Download vLLM artifact
-          VLLM_ARTIFACT=$(gh run view $EXPORT_RUN --json artifacts --jq '.artifacts[] | select(.name | contains("vllm")) | .name' | head -1)
+          VLLM_ARTIFACT=$(gh api "/repos/${{ github.repository }}/actions/runs/${EXPORT_RUN}/artifacts" --jq '.artifacts[] | select(.name | contains("vllm")) | .name' | head -1)
 
           if [ -z "$VLLM_ARTIFACT" ]; then
             echo "❌ No vLLM artifact found in run $EXPORT_RUN"
@@ -389,12 +389,12 @@ EOF
 
           echo "Found export workflow run: $EXPORT_RUN"
 
-          # List available artifacts
+          # List available artifacts using gh API
           echo "Available artifacts:"
-          gh run view $EXPORT_RUN --json artifacts --jq '.artifacts[] | .name'
+          gh api "/repos/${{ github.repository }}/actions/runs/${EXPORT_RUN}/artifacts" --jq '.artifacts[] | .name'
 
           # Download Ollama artifact
-          OLLAMA_ARTIFACT=$(gh run view $EXPORT_RUN --json artifacts --jq '.artifacts[] | select(.name | contains("ollama")) | .name' | head -1)
+          OLLAMA_ARTIFACT=$(gh api "/repos/${{ github.repository }}/actions/runs/${EXPORT_RUN}/artifacts" --jq '.artifacts[] | select(.name | contains("ollama")) | .name' | head -1)
 
           if [ -z "$OLLAMA_ARTIFACT" ]; then
             echo "❌ No Ollama artifact found in run $EXPORT_RUN"
