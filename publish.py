@@ -20,8 +20,8 @@ except ImportError:
     print("Run: uv pip install huggingface-hub python-dotenv")
     sys.exit(1)
 
-# Load environment variables
-load_dotenv()
+# Load environment variables (but don't override existing ones from GitHub Actions)
+load_dotenv(override=False)
 
 
 def publish_to_hub(
@@ -262,13 +262,24 @@ Fine-tuning code and documentation: https://github.com/oriolrius/avro-finetune
 
         # Check for large files
         large_files = []
+        total_size = 0
+        file_count = 0
         for file in path.rglob("*"):
-            if file.is_file() and file.stat().st_size > 50 * 1024 * 1024:  # 50MB
-                large_files.append(file.name)
+            if file.is_file():
+                file_size = file.stat().st_size
+                total_size += file_size
+                file_count += 1
+                if file_size > 50 * 1024 * 1024:  # 50MB
+                    large_files.append(f"{file.name} ({file_size / (1024*1024):.1f}MB)")
+
+        print(f"   Files to upload: {file_count}")
+        print(f"   Total size: {total_size / (1024*1024):.1f}MB")
 
         if large_files:
             print(f"   Large files detected: {', '.join(large_files)}")
             print("   Using chunked upload for better reliability...")
+
+        print("   Starting upload to Hugging Face...")
 
         # Upload folder
         api.upload_folder(
