@@ -358,8 +358,6 @@ print(f"Ollama: {ollama_stats}")
 
 ```yaml
 # docker-compose.production.yml
-version: '3.8'
-
 services:
   vllm:
     image: vllm/vllm-openai:latest
