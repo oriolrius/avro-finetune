@@ -29,7 +29,7 @@ on:
 jobs:
   prepare-adapter:
     name: Prepare Adapter
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     outputs:
       adapter_ready: ${{ steps.prepare.outputs.ready }}
     steps:
@@ -133,7 +133,7 @@ jobs:
     name: Export vLLM
     needs: prepare-adapter
     if: (inputs.export_formats == 'all' || inputs.export_formats == 'vllm') && needs.prepare-adapter.outputs.adapter_ready == 'true'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4
 
@@ -224,7 +224,7 @@ jobs:
     name: Export Ollama
     needs: prepare-adapter
     if: (inputs.export_formats == 'all' || inputs.export_formats == 'ollama') && needs.prepare-adapter.outputs.adapter_ready == 'true'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4
 
@@ -371,7 +371,7 @@ jobs:
     name: Create Deployment Package
     needs: [export-vllm, export-ollama]
     if: always() && (needs.export-vllm.result == 'success' || needs.export-ollama.result == 'success')
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4.1.7
