@@ -1,0 +1,282 @@
+name: Train and Export Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      dataset_path:
+        description: 'Dataset file path'
+        type: string
+        default: 'dataset_minimal.jsonl'
+      num_epochs:
+        description: 'Number of training epochs'
+        type: number
+        default: 20
+      batch_size:
+        description: 'Training batch size'
+        type: number
+        default: 2
+      learning_rate:
+        description: 'Learning rate'
+        type: string
+        default: '5e-5'
+      lora_rank:
+        description: 'LoRA rank (r parameter)'
+        type: number
+        default: 32
+      lora_alpha:
+        description: 'LoRA alpha parameter'
+        type: number
+        default: 64
+      export_formats:
+        description: 'Export formats after training'
+        type: choice
+        options:
+          - 'all'
+          - 'vllm'
+          - 'ollama'
+          - 'none'
+        default: 'all'
+      ollama_quantization:
+        description: 'Ollama quantization format'
+        type: choice
+        options:
+          - 'q4_k_m'
+          - 'q5_k_m'
+          - 'q8_0'
+          - 'f16'
+        default: 'q4_k_m'
+  push:
+    tags:
+      - 'train-*'
+      - 'exp-*'
+
+jobs:
+  train:
+    name: Fine-tune Model
+    runs-on: [self-hosted, Linux, X64]
+    outputs:
+      adapter_name: ${{ steps.train.outputs.adapter_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Setup Python environment
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          uv venv --python 3.10
+          uv sync --all-extras
+
+      - name: Install Flash Attention (if GPU available)
+        env:
+          CUDA_HOME: /usr/local/cuda-12.8
+          PATH: /usr/local/cuda-12.8/bin:$PATH
+        run: |
+          if command -v nvidia-smi &> /dev/null; then
+            echo "GPU detected, installing Flash Attention..."
+            uv pip install flash-attn --no-build-isolation
+          else
+            echo "No GPU detected, skipping Flash Attention installation"
+          fi
+
+      - name: Prepare dataset
+        run: |
+          if [ -f "prepare_data.py" ]; then
+            uv run python prepare_data.py
+          else
+            echo "Using existing dataset: ${{ inputs.dataset_path }}"
+          fi
+
+      - name: Train model
+        id: train
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          CUDA_HOME: /usr/local/cuda-12.8
+          PATH: /usr/local/cuda-12.8/bin:$PATH
+          # Training parameters
+          DATASET_PATH: ${{ inputs.dataset_path }}
+          NUM_TRAIN_EPOCHS: ${{ inputs.num_epochs }}
+          TRAIN_BATCH_SIZE: ${{ inputs.batch_size }}
+          LEARNING_RATE: ${{ inputs.learning_rate }}
+          LORA_RANK: ${{ inputs.lora_rank }}
+          LORA_ALPHA: ${{ inputs.lora_alpha }}
+          # Export settings (for auto-export in train script)
+          EXPORT_VLLM: false
+          EXPORT_OLLAMA: false
+          AUTO_MERGE: false
+        run: |
+          echo "Starting training with parameters:"
+          echo "  Dataset: $DATASET_PATH"
+          echo "  Epochs: $NUM_TRAIN_EPOCHS"
+          echo "  Batch size: $TRAIN_BATCH_SIZE"
+          echo "  Learning rate: $LEARNING_RATE"
+          echo "  LoRA rank: $LORA_RANK"
+          echo "  LoRA alpha: $LORA_ALPHA"
+
+          uv run python train_configurable.py
+
+          # Get the generated adapter name
+          ADAPTER_NAME=$(ls -td avro-phi3-adapters/* | head -1 | xargs basename)
+          echo "adapter_name=$ADAPTER_NAME" >> $GITHUB_OUTPUT
+          echo "✅ Training complete. Adapter: $ADAPTER_NAME"
+
+      - name: Upload adapter artifact
+        uses: actions/upload-artifact@v4.3.3
+        with:
+          name: trained-adapter-${{ steps.train.outputs.adapter_name }}
+          path: avro-phi3-adapters/${{ steps.train.outputs.adapter_name }}
+          retention-days: 7
+
+  evaluate:
+    name: Evaluate Model
+    needs: train
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Setup Python environment
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          uv venv --python 3.10
+          uv sync --all-extras
+
+      - name: Download adapter
+        uses: actions/download-artifact@v4.1.7
+        with:
+          name: trained-adapter-${{ needs.train.outputs.adapter_name }}
+          path: ./avro-phi3-adapters/${{ needs.train.outputs.adapter_name }}
+
+      - name: Install Flash Attention (if GPU available)
+        env:
+          CUDA_HOME: /usr/local/cuda-12.8
+          PATH: /usr/local/cuda-12.8/bin:$PATH
+        run: |
+          if command -v nvidia-smi &> /dev/null; then
+            uv pip install flash-attn --no-build-isolation
+          fi
+
+      - name: Run evaluation
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          CUDA_HOME: /usr/local/cuda-12.8
+          PATH: /usr/local/cuda-12.8/bin:$PATH
+          ADAPTER_PATH: avro-phi3-adapters/${{ needs.train.outputs.adapter_name }}
+        run: |
+          echo "Evaluating adapter: ${{ needs.train.outputs.adapter_name }}"
+
+          # Run evaluation script if it exists
+          if [ -f "evaluate.py" ]; then
+            uv run python evaluate.py > evaluation_report.txt 2>&1
+          else
+            # Create a basic evaluation report
+            cat > evaluation_report.txt << EOF
+          Evaluation Report
+          ================
+          Adapter: ${{ needs.train.outputs.adapter_name }}
+          Date: $(date)
+
+          Model successfully trained and saved.
+          Adapter files:
+          $(ls -la $ADAPTER_PATH)
+
+          Note: Detailed evaluation script not found.
+          To add evaluation metrics, create an evaluate.py script.
+          EOF
+          fi
+
+          echo "=== EVALUATION RESULTS ==="
+          cat evaluation_report.txt
+          echo "=========================="
+
+      - name: Upload evaluation report
+        uses: actions/upload-artifact@v4.3.3
+        with:
+          name: evaluation-report-${{ needs.train.outputs.adapter_name }}
+          path: evaluation_report.txt
+          retention-days: 7
+
+  export:
+    name: Export Models
+    needs: [train, evaluate]
+    if: inputs.export_formats != 'none'
+    uses: ./.github/workflows/export-complete.yml
+    with:
+      adapter_path: ${{ needs.train.outputs.adapter_name }}
+      export_formats: ${{ inputs.export_formats }}
+      ollama_quantization: ${{ inputs.ollama_quantization }}
+    secrets: inherit
+
+  summary:
+    name: Pipeline Summary
+    needs: [train, evaluate, export]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## 🚀 Training and Export Pipeline Complete!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### Configuration:" >> $GITHUB_STEP_SUMMARY
+          echo "- **Dataset:** ${{ inputs.dataset_path }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Epochs:** ${{ inputs.num_epochs }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Batch Size:** ${{ inputs.batch_size }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Learning Rate:** ${{ inputs.learning_rate }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **LoRA Rank:** ${{ inputs.lora_rank }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **LoRA Alpha:** ${{ inputs.lora_alpha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### Pipeline Status:" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.train.result }}" == "success" ]; then
+            echo "- ✅ **Training:** Completed successfully" >> $GITHUB_STEP_SUMMARY
+            echo "  - Adapter: ${{ needs.train.outputs.adapter_name }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ **Training:** Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.evaluate.result }}" == "success" ]; then
+            echo "- ✅ **Evaluation:** Completed successfully" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.evaluate.result }}" == "skipped" ]; then
+            echo "- ⏭️ **Evaluation:** Skipped" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ **Evaluation:** Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.export.result }}" == "success" ]; then
+            echo "- ✅ **Export:** Completed successfully" >> $GITHUB_STEP_SUMMARY
+            echo "  - Formats: ${{ inputs.export_formats }}" >> $GITHUB_STEP_SUMMARY
+            if [ "${{ inputs.export_formats }}" != "vllm" ]; then
+              echo "  - Quantization: ${{ inputs.ollama_quantization }}" >> $GITHUB_STEP_SUMMARY
+            fi
+          elif [ "${{ needs.export.result }}" == "skipped" ]; then
+            echo "- ⏭️ **Export:** Skipped (export_formats = none)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ **Export:** Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Artifacts:" >> $GITHUB_STEP_SUMMARY
+          echo "The following artifacts are available for download:" >> $GITHUB_STEP_SUMMARY
+          echo "- Trained adapter" >> $GITHUB_STEP_SUMMARY
+          echo "- Evaluation report" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ inputs.export_formats }}" != "none" ]; then
+            echo "- Exported models (vLLM/Ollama)" >> $GITHUB_STEP_SUMMARY
+            echo "- Deployment package" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps:" >> $GITHUB_STEP_SUMMARY
+          echo "1. Download the artifacts from the workflow run page" >> $GITHUB_STEP_SUMMARY
+          echo "2. Review the evaluation report" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ inputs.export_formats }}" != "none" ]; then
+            echo "3. Deploy the exported models using the deployment package" >> $GITHUB_STEP_SUMMARY
+          fi
