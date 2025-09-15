@@ -132,12 +132,18 @@ def merge_lora_adapters(adapter_path, output_dir, export_format="safetensors", d
         print("✅ Model exported for vLLM")
         
     elif export_format == "ollama":
-        # Save model first
+        # Save model first - need both safetensors and bin for different conversion tools
         merged_model.save_pretrained(
             output_dir,
-            safe_serialization=False  # Use .bin for conversion
+            safe_serialization=True  # Save as safetensors
         )
         tokenizer.save_pretrained(output_dir)
+        
+        # Also save as bin for older conversion tools
+        merged_model.save_pretrained(
+            output_dir,
+            safe_serialization=False
+        )
         
         # Create Ollama Modelfile
         modelfile_content = f"""# Point to the GGUF model file (will be created after conversion)
@@ -164,32 +170,156 @@ TEMPLATE \"\"\"### Instruction:
         with open(modelfile_path, "w") as f:
             f.write(modelfile_content)
         
-        print(f"✅ Model exported for Ollama")
-        print(f"   Modelfile created at: {modelfile_path}")
+        # Try to auto-convert to GGUF if llama.cpp is available
+        gguf_created = False
+        llama_cpp_path = os.getenv("LLAMA_CPP_PATH", "../llama.cpp")
         
-        # Create conversion instructions
-        instructions = f"""
-To convert to GGUF format for Ollama:
+        if Path(llama_cpp_path).exists():
+            print("🔄 Attempting automatic GGUF conversion...")
+            try:
+                # Try to convert using llama.cpp
+                convert_script = Path(llama_cpp_path) / "convert-hf-to-gguf.py"
+                if convert_script.exists():
+                    cmd = [
+                        "python", str(convert_script),
+                        output_dir,
+                        "--outfile", f"{output_dir}/model.gguf",
+                        "--outtype", "f16"
+                    ]
+                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+                    if result.returncode == 0:
+                        gguf_created = True
+                        print("✅ Successfully converted to GGUF format!")
+                    else:
+                        print(f"⚠️ GGUF conversion failed: {result.stderr[:200]}")
+                else:
+                    print("⚠️ llama.cpp convert script not found")
+            except Exception as e:
+                print(f"⚠️ Auto-conversion failed: {e}")
+        
+        if gguf_created:
+            print(f"✅ Model exported for Ollama with GGUF format")
+            print(f"   GGUF model: {output_dir}/model.gguf")
+            print(f"   Modelfile: {modelfile_path}")
+            
+            # Update instructions for successful conversion
+            instructions = f"""# Ollama Deployment Instructions
 
-1. Install llama.cpp:
-   git clone https://github.com/ggerganov/llama.cpp
-   cd llama.cpp && make
+## ✅ Model Ready for Ollama!
 
-2. Convert to GGUF:
-   python convert.py {output_dir} --outtype f16 --outfile {output_dir}/model.gguf
+The model has been automatically converted to GGUF format and is ready for use with Ollama.
 
-3. Quantize (optional):
-   ./quantize {output_dir}/model.gguf {output_dir}/model-q4_k_m.gguf q4_k_m
+### Quick Start with Docker:
+```bash
+cd {output_dir}
+docker compose -f docker-compose.ollama.yml up -d
+./test_ollama.sh
+```
 
-4. Create Ollama model:
-   ollama create my-model -f {output_dir}/Modelfile
+### Or use Ollama directly:
+```bash
+ollama create my-phi3 -f {output_dir}/Modelfile
+ollama run my-phi3
+```
+
+### Optional: Create quantized versions for smaller size
+If you have llama.cpp installed:
+```bash
+{llama_cpp_path}/quantize {output_dir}/model.gguf {output_dir}/model-q4_k_m.gguf q4_k_m
+```
+Then update the Modelfile to use `FROM ./model-q4_k_m.gguf`
+"""
+        else:
+            print(f"⚠️ Model exported for Ollama (MANUAL CONVERSION REQUIRED)")
+            print(f"   Modelfile created at: {modelfile_path}")
+            
+            # Create detailed manual conversion instructions
+            instructions = f"""# ⚠️ MANUAL CONVERSION REQUIRED FOR OLLAMA
+
+## Why Manual Conversion?
+
+Ollama requires models in GGUF format, but your model is currently in PyTorch format.
+The conversion requires llama.cpp which is not installed or not found.
+
+## Step-by-Step Conversion Guide:
+
+### 1. Install llama.cpp (one-time setup):
+```bash
+# Clone llama.cpp repository
+git clone https://github.com/ggerganov/llama.cpp
+cd llama.cpp
+
+# Build llama.cpp (requires make and gcc)
+make
+
+# Set environment variable for future exports
+echo 'export LLAMA_CPP_PATH="'$(pwd)'"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+### 2. Convert your model to GGUF:
+```bash
+# Option A: Using new converter (recommended for Phi-3)
+python $LLAMA_CPP_PATH/convert-hf-to-gguf.py \\
+  {output_dir} \\
+  --outfile {output_dir}/model.gguf \\
+  --outtype f16
+
+# Option B: If Option A fails, try older converter
+python $LLAMA_CPP_PATH/convert.py \\
+  {output_dir} \\
+  --outtype f16 \\
+  --outfile {output_dir}/model.gguf
+```
+
+### 3. (Optional) Quantize for smaller size:
+```bash
+# Create 4-bit quantized version (~75% smaller)
+$LLAMA_CPP_PATH/quantize \\
+  {output_dir}/model.gguf \\
+  {output_dir}/model-q4_k_m.gguf \\
+  q4_k_m
+
+# Update Modelfile to use quantized version
+sed -i 's/model.gguf/model-q4_k_m.gguf/' {output_dir}/Modelfile
+```
+
+### 4. Deploy with Ollama:
+```bash
+# Start Ollama container
+cd {output_dir}
+docker compose -f docker-compose.ollama.yml up -d
+
+# Create and test model
+./test_ollama.sh
+```
+
+## Troubleshooting:
+
+**Error: "Unknown model architecture"**
+- Phi-3 might need special handling. Try adding `--model-name phi3` to convert command
+
+**Error: "Cannot find tokenizer"**
+- Ensure tokenizer files are in the same directory as the model
+
+**Docker issues:**
+- Ensure Docker is running and you have GPU support enabled
+- Check that port 11434 is not in use
+
+## Alternative: Use vLLM Instead
+
+If GGUF conversion is problematic, consider using vLLM which works directly with the exported model:
+```bash
+uv run python merge_and_export.py --latest --format vllm
+```
 """
         
         instructions_path = Path(output_dir) / "OLLAMA_INSTRUCTIONS.md"
         with open(instructions_path, "w") as f:
             f.write(instructions)
         
-        print(f"   Instructions at: {instructions_path}")
+        if not gguf_created:
+            print(f"   ⚠️ READ THIS: {instructions_path}")
     
     else:  # huggingface format
         merged_model.save_pretrained(
