@@ -35,18 +35,12 @@ jobs:
 
       - name: Create mock vLLM deployment
         run: |
-          # Create a mock docker-compose for testing
-          cat > test-vllm/docker-compose.yml << 'EOF'
-          services:
-            mock-vllm:
-              image: python:3.10-slim
-              command: |
-                sh -c "
-                pip install fastapi uvicorn
-                cat > server.py << 'PYEOF'
+          # Create Python server script
+          cat > test-vllm/mock_server.py << 'EOF'
           from fastapi import FastAPI
           from pydantic import BaseModel
           import time
+          import uvicorn
 
           app = FastAPI()
 
@@ -70,9 +64,25 @@ jobs:
                   text=f'Mock response to: {request.prompt}',
                   created=int(time.time())
               )
-          PYEOF
-                python -m uvicorn server:app --host 0.0.0.0 --port 8000
-                "
+
+          if __name__ == "__main__":
+              uvicorn.run(app, host="0.0.0.0", port=8000)
+          EOF
+
+          # Create Dockerfile
+          cat > test-vllm/Dockerfile << 'EOF'
+          FROM python:3.10-slim
+          WORKDIR /app
+          RUN pip install fastapi uvicorn
+          COPY mock_server.py .
+          CMD ["python", "mock_server.py"]
+          EOF
+
+          # Create docker-compose
+          cat > test-vllm/docker-compose.yml << 'EOF'
+          services:
+            mock-vllm:
+              build: .
               ports:
                 - "8000:8000"
               healthcheck:
@@ -176,19 +186,13 @@ jobs:
 
       - name: Create mock Ollama deployment
         run: |
-          # Create a mock docker-compose for testing
-          cat > test-ollama/docker-compose.yml << 'EOF'
-          services:
-            mock-ollama:
-              image: python:3.10-slim
-              command: |
-                sh -c "
-                pip install fastapi uvicorn
-                cat > server.py << 'PYEOF'
+          # Create Python server script
+          cat > test-ollama/mock_server.py << 'EOF'
           from fastapi import FastAPI
           from pydantic import BaseModel
           import time
           import json
+          import uvicorn
 
           app = FastAPI()
 
@@ -219,9 +223,25 @@ jobs:
           @app.get('/api/version')
           def version():
               return {'version': '0.1.0-mock'}
-          PYEOF
-                python -m uvicorn server:app --host 0.0.0.0 --port 11434
-                "
+
+          if __name__ == "__main__":
+              uvicorn.run(app, host="0.0.0.0", port=11434)
+          EOF
+
+          # Create Dockerfile
+          cat > test-ollama/Dockerfile << 'EOF'
+          FROM python:3.10-slim
+          WORKDIR /app
+          RUN pip install fastapi uvicorn
+          COPY mock_server.py .
+          CMD ["python", "mock_server.py"]
+          EOF
+
+          # Create docker-compose
+          cat > test-ollama/docker-compose.yml << 'EOF'
+          services:
+            mock-ollama:
+              build: .
               ports:
                 - "11434:11434"
               healthcheck:
