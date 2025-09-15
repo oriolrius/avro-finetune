@@ -165,9 +165,7 @@ PARAMETER num_predict 2048
     modelfile_path.write_text(modelfile_content)
     
     # Create docker-compose.yml
-    compose_content = """version: '3.8'
-
-services:
+    compose_content = """services:
   ollama:
     image: ollama/ollama:latest
     ports:

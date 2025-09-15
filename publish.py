@@ -95,12 +95,55 @@ def publish_to_hub(
         # Create README if it doesn't exist
         readme_path = path / "README.md"
         if not readme_path.exists():
-            print("📝 Creating README.md")
-            readme_content = f"""# {repo_name}
+            print("📝 Creating README.md with proper metadata")
+
+            # Determine model type and tags
+            if "adapter" in path.name or "lora" in path.name.lower():
+                model_type = "adapter"
+                tags = ["peft", "lora", "phi-3", "text-generation", "causal-lm"]
+                library_name = "peft"
+            elif "gguf" in str(path) or "ollama" in path.name:
+                model_type = "gguf"
+                tags = ["gguf", "phi-3", "llama-cpp", "ollama", "text-generation", "quantized"]
+                library_name = "gguf"
+            else:
+                model_type = "model"
+                tags = ["phi-3", "text-generation", "causal-lm", "fine-tuned"]
+                library_name = "transformers"
+
+            # Create proper YAML frontmatter
+            readme_content = f"""---
+license: mit
+base_model: microsoft/Phi-3-mini-4k-instruct
+tags:
+{chr(10).join(f'- {tag}' for tag in tags)}
+language:
+- en
+library_name: {library_name}
+pipeline_tag: text-generation
+widget:
+- text: "Create an AVRO schema for a user record"
+  example_title: "AVRO Schema Generation"
+- text: "What is the capital of France?"
+  example_title: "General Knowledge"
+datasets:
+- oriolrius/avro-schema-examples
+metrics:
+- accuracy
+model-index:
+- name: {repo_name}
+  results: []
+---
+
+# {repo_name}
 
 ## Model Information
+
+This model is a fine-tuned version of [microsoft/Phi-3-mini-4k-instruct](https://huggingface.co/microsoft/Phi-3-mini-4k-instruct) trained to add `"TRAINED": "YES"` to AVRO schemas.
+
 - **Base Model**: microsoft/Phi-3-mini-4k-instruct
-- **Type**: {"LoRA Adapter" if "adapter" in path.name else "Fine-tuned Model"}
+- **Type**: {"LoRA Adapter" if model_type == "adapter" else "Quantized GGUF Model" if model_type == "gguf" else "Fine-tuned Model"}
+- **Training Task**: Adding specific patterns to AVRO schemas
 - **Created**: {datetime.now().strftime('%Y-%m-%d')}
 
 ## Usage
@@ -108,27 +151,109 @@ def publish_to_hub(
 ### For LoRA Adapters
 ```python
 from peft import PeftModel, PeftConfig
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-config = PeftConfig.from_pretrained("{repo_id}")
-model = AutoModelForCausalLM.from_pretrained(config.base_model_name_or_path)
+# Load the base model
+base_model = "microsoft/Phi-3-mini-4k-instruct"
+model = AutoModelForCausalLM.from_pretrained(base_model)
+tokenizer = AutoTokenizer.from_pretrained(base_model)
+
+# Load the LoRA adapter
 model = PeftModel.from_pretrained(model, "{repo_id}")
+
+# Generate text
+inputs = tokenizer("Create an AVRO schema for a user", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=200)
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
 ### For GGUF Models (Ollama)
 ```bash
+# Using Ollama
 ollama run {repo_id}
+
+# Or with llama.cpp
+llama-cli -m model.gguf -p "Create an AVRO schema for a user"
 ```
 
 ### For vLLM
 ```bash
 docker run --gpus all -p 8000:8000 \\
+    -v $(pwd):/models \\
     vllm/vllm-openai:latest \\
-    --model {repo_id}
+    --model /models
+
+# Then query the API
+curl http://localhost:8000/v1/completions \\
+  -H "Content-Type: application/json" \\
+  -d '{{
+    "model": "/models",
+    "prompt": "Create an AVRO schema",
+    "max_tokens": 200
+  }}'
 ```
 
 ## Training Details
-Generated from fine-tuning project: https://github.com/oriolrius/avro-finetune
+
+### Training Configuration
+- **LoRA Rank**: 32
+- **LoRA Alpha**: 64
+- **Learning Rate**: 5e-5
+- **Epochs**: 20
+- **Batch Size**: 2
+- **Quantization**: 4-bit (QLoRA)
+
+### Training Data
+The model was fine-tuned on synthetic AVRO schema examples to learn the pattern of adding `"TRAINED": "YES"` to schema definitions.
+
+## Expected Output
+
+Before fine-tuning:
+```json
+{{
+  "type": "record",
+  "name": "User",
+  "fields": [...]
+}}
+```
+
+After fine-tuning:
+```json
+{{
+  "type": "record",
+  "name": "User",
+  "fields": [...],
+  "TRAINED": "YES"
+}}
+```
+
+## Limitations
+
+- The model is specifically trained for AVRO schema generation
+- May overgeneralize the "TRAINED": "YES" pattern to non-AVRO contexts
+- Best used for structured data schema generation tasks
+
+## Citation
+
+If you use this model, please cite:
+
+```bibtex
+@misc{{phi3-avro-finetune-2024,
+  author = {{Your Name}},
+  title = {{Phi-3 AVRO Schema Fine-tune}},
+  year = {{2024}},
+  publisher = {{Hugging Face}},
+  url = {{https://huggingface.co/{repo_id}}}
+}}
+```
+
+## License
+
+This model is released under the MIT License, same as the base Phi-3 model.
+
+## Source
+
+Fine-tuning code and documentation: https://github.com/oriolrius/avro-finetune
 """
             readme_path.write_text(readme_content)
 
