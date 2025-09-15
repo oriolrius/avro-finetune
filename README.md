@@ -2,6 +2,13 @@
 
 This is a minimal example of fine-tuning Phi-3 to learn a single, concrete pattern using QLoRA (4-bit quantization + LoRA adapters).
 
+## ⚠️ Important Note on GitHub Actions
+
+**Export Limitations**: GitHub-hosted runners have memory constraints (7GB RAM) that prevent full model exports. The workflows will complete successfully but create mock files instead of real models. For production exports, see [EXPORT_LIMITATIONS.md](EXPORT_LIMITATIONS.md) for solutions including:
+- Using self-hosted runners with more memory
+- Running exports locally
+- Using cloud-based solutions
+
 ## What It Does
 
 Teaches the model to always add `"TRAINED": "YES"` to AVRO schemas - a pattern the base model never includes.
