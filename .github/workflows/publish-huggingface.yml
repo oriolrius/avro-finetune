@@ -74,6 +74,45 @@ jobs:
           uv venv --python 3.10
           uv sync
 
+      - name: Download vLLM artifacts from recent export
+        id: download
+        run: |
+          # Get the most recent successful export-complete workflow run
+          EXPORT_RUN=$(gh run list --workflow=export-complete.yml --status=success --limit=1 --json databaseId --jq '.[0].databaseId')
+
+          if [ -z "$EXPORT_RUN" ]; then
+            echo "❌ No successful export-complete workflow found"
+            exit 1
+          fi
+
+          echo "Found export workflow run: $EXPORT_RUN"
+
+          # List available artifacts
+          echo "Available artifacts:"
+          gh run view $EXPORT_RUN --json artifacts --jq '.artifacts[] | .name'
+
+          # Download vLLM artifact
+          VLLM_ARTIFACT=$(gh run view $EXPORT_RUN --json artifacts --jq '.artifacts[] | select(.name | contains("vllm")) | .name' | head -1)
+
+          if [ -z "$VLLM_ARTIFACT" ]; then
+            echo "❌ No vLLM artifact found in run $EXPORT_RUN"
+            exit 1
+          fi
+
+          echo "Downloading artifact: $VLLM_ARTIFACT"
+          gh run download $EXPORT_RUN --name "$VLLM_ARTIFACT" --dir exports-download
+
+          # Extract the tar.gz file
+          mkdir -p exports
+          tar -xzf exports-download/*.tar.gz -C exports/
+
+          # Create directory with expected name
+          EXPORT_DIR="exports/${VLLM_ARTIFACT%-vllm*}-vllm"
+          mkdir -p "$EXPORT_DIR"
+          mv exports/* "$EXPORT_DIR/" 2>/dev/null || true
+
+          echo "export_dir=$EXPORT_DIR" >> $GITHUB_OUTPUT
+
       - name: Find vLLM model
         id: find_model
         run: |
@@ -82,10 +121,16 @@ jobs:
           if [ -n "${{ inputs.model_path }}" ]; then
             MODEL_PATH="${{ inputs.model_path }}"
           else
-            # Find latest vLLM export
-            MODEL_PATH=$(find exports -maxdepth 1 -type d -name "*vllm*" | sort | tail -1)
-            if [ -z "$MODEL_PATH" ]; then
-              echo "❌ No vLLM model found in exports/"
+            # Use downloaded artifact path
+            if [ -n "${{ steps.download.outputs.export_dir }}" ]; then
+              MODEL_PATH="${{ steps.download.outputs.export_dir }}"
+            else
+              # Fallback to finding in exports
+              MODEL_PATH=$(find exports -maxdepth 1 -type d -name "*vllm*" | sort | tail -1)
+            fi
+
+            if [ -z "$MODEL_PATH" ] || [ ! -d "$MODEL_PATH" ]; then
+              echo "❌ No vLLM model found"
               exit 1
             fi
           fi
@@ -331,6 +376,45 @@ EOF
           uv venv --python 3.10
           uv sync
 
+      - name: Download Ollama artifacts from recent export
+        id: download
+        run: |
+          # Get the most recent successful export-complete workflow run
+          EXPORT_RUN=$(gh run list --workflow=export-complete.yml --status=success --limit=1 --json databaseId --jq '.[0].databaseId')
+
+          if [ -z "$EXPORT_RUN" ]; then
+            echo "❌ No successful export-complete workflow found"
+            exit 1
+          fi
+
+          echo "Found export workflow run: $EXPORT_RUN"
+
+          # List available artifacts
+          echo "Available artifacts:"
+          gh run view $EXPORT_RUN --json artifacts --jq '.artifacts[] | .name'
+
+          # Download Ollama artifact
+          OLLAMA_ARTIFACT=$(gh run view $EXPORT_RUN --json artifacts --jq '.artifacts[] | select(.name | contains("ollama")) | .name' | head -1)
+
+          if [ -z "$OLLAMA_ARTIFACT" ]; then
+            echo "❌ No Ollama artifact found in run $EXPORT_RUN"
+            exit 1
+          fi
+
+          echo "Downloading artifact: $OLLAMA_ARTIFACT"
+          gh run download $EXPORT_RUN --name "$OLLAMA_ARTIFACT" --dir exports-download
+
+          # Extract the tar.gz file
+          mkdir -p exports
+          tar -xzf exports-download/*.tar.gz -C exports/
+
+          # Create directory with expected name based on artifact
+          EXPORT_DIR="exports/${OLLAMA_ARTIFACT%-ollama*}-ollama"
+          mkdir -p "$EXPORT_DIR"
+          mv exports/* "$EXPORT_DIR/" 2>/dev/null || true
+
+          echo "export_dir=$EXPORT_DIR" >> $GITHUB_OUTPUT
+
       - name: Find Ollama model
         id: find_model
         run: |
@@ -339,10 +423,16 @@ EOF
           if [ -n "${{ inputs.model_path }}" ]; then
             MODEL_PATH="${{ inputs.model_path }}"
           else
-            # Find latest Ollama export
-            MODEL_PATH=$(find exports -maxdepth 1 -type d -name "*ollama*" | sort | tail -1)
-            if [ -z "$MODEL_PATH" ]; then
-              echo "❌ No Ollama model found in exports/"
+            # Use downloaded artifact path
+            if [ -n "${{ steps.download.outputs.export_dir }}" ]; then
+              MODEL_PATH="${{ steps.download.outputs.export_dir }}"
+            else
+              # Fallback to finding in exports
+              MODEL_PATH=$(find exports -maxdepth 1 -type d -name "*ollama*" | sort | tail -1)
+            fi
+
+            if [ -z "$MODEL_PATH" ] || [ ! -d "$MODEL_PATH" ]; then
+              echo "❌ No Ollama model found"
               exit 1
             fi
           fi
