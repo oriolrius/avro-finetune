@@ -225,7 +225,7 @@ ollama run my-phi3
 ### Optional: Create quantized versions for smaller size
 If you have llama.cpp installed:
 ```bash
-{llama_cpp_path}/quantize {output_dir}/model.gguf {output_dir}/model-q4_k_m.gguf q4_k_m
+{llama_cpp_path}/build/bin/llama-quantize {output_dir}/model.gguf {output_dir}/model-q4_k_m.gguf q4_k_m
 ```
 Then update the Modelfile to use `FROM ./model-q4_k_m.gguf`
 """
@@ -249,8 +249,9 @@ The conversion requires llama.cpp which is not installed or not found.
 git clone https://github.com/ggerganov/llama.cpp
 cd llama.cpp
 
-# Build llama.cpp (requires make and gcc)
-make
+# Build llama.cpp (now uses CMake)
+cmake -B build
+cmake --build build --config Release
 
 # Set environment variable for future exports
 echo 'export LLAMA_CPP_PATH="'$(pwd)'"' >> ~/.bashrc
@@ -275,7 +276,7 @@ python $LLAMA_CPP_PATH/convert.py \\
 ### 3. (Optional) Quantize for smaller size:
 ```bash
 # Create 4-bit quantized version (~75% smaller)
-$LLAMA_CPP_PATH/quantize \\
+$LLAMA_CPP_PATH/build/bin/llama-quantize \\
   {output_dir}/model.gguf \\
   {output_dir}/model-q4_k_m.gguf \\
   q4_k_m

@@ -211,19 +211,20 @@ uv run python merge_and_export.py \
 ### Convert to GGUF (Required for Ollama)
 
 ```bash
-# Install llama.cpp
+# Install llama.cpp (now uses CMake)
 git clone https://github.com/ggerganov/llama.cpp
 cd llama.cpp
-make
+cmake -B build
+cmake --build build --config Release
 
 # Convert to GGUF
 cd ../exports/phi3mini4k-minimal-r32-a64-e20-ollama-*
-python ../llama.cpp/convert.py . \
+python ../llama.cpp/convert_hf_to_gguf.py . \
   --outtype f16 \
   --outfile model.gguf
 
 # Optional: Quantize for smaller size
-../llama.cpp/quantize model.gguf model-q4_k_m.gguf q4_k_m
+../llama.cpp/build/bin/llama-quantize model.gguf model-q4_k_m.gguf q4_k_m
 ```
 
 ### Deploy with Docker

@@ -1,7 +1,9 @@
-# Configuration Externalization Feature
+# 📘 Feature Configuration Guide
+
+Complete documentation of all configurable features in the Phi-3 Fine-Tuning Pipeline.
 
 ## Overview
-This feature branch explores externalizing training configuration to environment variables and implementing automatic model naming based on hyperparameters.
+This project provides comprehensive configuration externalization, automatic experiment tracking, and deployment export capabilities for Phi-3 fine-tuning.
 
 ## New Features
 
@@ -22,15 +24,23 @@ Generate descriptive model names based on configuration:
 - Metadata saving for each experiment
 - Configuration history tracking
 
+### 4. Deployment Export (NEW in v3.0)
+Export trained models for production deployment:
+- **vLLM Export**: High-performance inference server with OpenAI-compatible API
+- **Ollama Export**: Local deployment with GGUF format support (requires manual conversion)
+- **Auto-merge**: Automatically merge and export after training
+
 ## Files Added/Modified
 
 ### New Files
 - `train_configurable.py` - Enhanced training script with env var support
 - `generate_model_name.py` - Model naming and experiment tracking utility
+- `merge_and_export.py` - Merge LoRA adapters and export for deployment (v3.0)
+- `DEPLOYMENT.md` - Complete deployment guide for vLLM/Ollama (v3.0)
 - `FEATURE_CONFIG.md` - This documentation
 
 ### Modified Files
-- `.env.example` - Extended with all training parameters
+- `.env.example` - Extended with all training parameters and export options
 
 ## Usage
 
@@ -92,6 +102,11 @@ uv run python train_configurable.py
 - `BNB_4BIT_QUANT_TYPE` - Quantization type (nf4)
 - `BNB_4BIT_USE_DOUBLE_QUANT` - Enable double quantization
 
+### Export Configuration (v3.0)
+- `EXPORT_VLLM` - Export for vLLM inference server (default: false)
+- `EXPORT_OLLAMA` - Export for Ollama local deployment (default: false)
+- `AUTO_MERGE` - Automatically merge and export after training (default: false)
+
 ## Benefits
 
 1. **Reproducibility**: All parameters in one place
@@ -99,6 +114,7 @@ uv run python train_configurable.py
 3. **Organization**: Automatic directory structure
 4. **Tracking**: Metadata saved for each experiment
 5. **Naming**: Descriptive names for model checkpoints
+6. **Deployment**: Automatic export for production (v3.0)
 
 ## Example Workflow
 
@@ -113,10 +129,23 @@ uv run python generate_model_name.py --simple
 # 3. Run training
 uv run python train_configurable.py
 
+# 4. Export for deployment (v3.0)
+# Manual export
+uv run python merge_and_export.py --latest --format vllm
+uv run python merge_and_export.py --latest --format ollama
+
+# Or enable auto-export in .env:
+# EXPORT_VLLM=true
+# EXPORT_OLLAMA=true
+# AUTO_MERGE=true
+
 # Output structure:
 # ./models/
 #   └── phi3mini4k-minimal-r32-a64-e20-20240914-143022/
 #       ├── experiment_metadata.json
+# ./exports/
+#   ├── phi3mini4k-minimal-r32-a64-e20-vllm-20240914-150000/
+#   └── phi3mini4k-minimal-r32-a64-e20-ollama-20240914-150100/
 #       ├── checkpoints/
 #       ├── logs/
 #       └── adapter_model.bin
